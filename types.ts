@@ -53,12 +53,12 @@ export interface BusinessData {
   brochureBase64?: string | string[] | null; // Updated to support array of base64 strings
 }
 
-export type GeneratedDesignStatus = 'pending' | 'generating' | 'completed' | 'failed' | 'cancelled'; // For web designs
+export type GeneratedResultStatus = 'ready' | 'pending_designer_review' | 'generating_by_designer' | 'failed'; // For web designs
 
 export interface GeneratedResult {
   id: string; // Client-side generated ID (or DB ID)
   designTaskId?: number; // New: Link to DesignTask if it's a web design
-  status?: GeneratedDesignStatus; // New: Status for web designs (e.g., pending)
+  status?: GeneratedResultStatus; // New: Status for web designs (e.g., pending)
   templateId?: string; // Updated: Now stores the conceptual template ID (e.g., 'logo-L1-minimalist-tech')
   templateUrl?: string; // For external templates, if applicable
   templateTitle?: string; 

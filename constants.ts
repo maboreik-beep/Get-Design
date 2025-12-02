@@ -201,6 +201,10 @@ export const TRANSLATIONS: Record<Language, Translation> = {
     task_status_failed: "Failed",
     task_status_cancelled: "Cancelled",
     web_design_pending_message: "Your website design request has been submitted for review. A designer will process it shortly. Please check 'My Creations' or your email for updates.",
+    design_status_ready: "Ready",
+    design_status_pending_review_mockup: "Draft (Pending Review)",
+    design_status_generating_by_designer: "Generating by Designer",
+    design_status_failed: "Failed",
   },
   ar: {
     title: "جيت ديزاين AI",
@@ -380,5 +384,9 @@ export const TRANSLATIONS: Record<Language, Translation> = {
     task_status_failed: "فشل",
     task_status_cancelled: "ألغيت",
     web_design_pending_message: "تم إرسال طلب تصميم موقع الويب الخاص بك للمراجعة. سيتولى المصمم معالجته قريبًا. يرجى التحقق من 'إبداعاتي' أو بريدك الإلكتروني للحصول على التحديثات.",
+    design_status_ready: "جاهز",
+    design_status_pending_review_mockup: "مسودة (قيد المراجعة)",
+    design_status_generating_by_designer: "يتم التوليد بواسطة المصمم",
+    design_status_failed: "فشل",
   }
 };

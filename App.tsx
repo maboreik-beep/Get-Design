@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { 
   DesignType, 
@@ -7,7 +8,7 @@ import {
   Language,
   VisualStyle,
   InputMode, // New InputMode type
-  GeneratedDesignStatus, // New
+  GeneratedResultStatus, // New
 } from './types';
 import { TRANSLATIONS, WEBSITE_PAGES, SUPPORT_NUMBER } from './constants'; // Removed GOOGLE_SCRIPT_URL
 import { generateDesign } from './services/geminiService'; // Fix: Now correctly importing named export
@@ -99,6 +100,34 @@ function App() {
       setIsAdmin(true);
     }
   }, []);
+
+  useEffect(() => {
+    // Handle hash routing for deep linking to generated designs
+    const handleHashChange = () => {
+      const hash = window.location.hash;
+      if (hash.startsWith('#result-')) {
+        const designId = hash.substring('#result-'.length);
+        const foundDesign = history.find(d => d.id === designId);
+        if (foundDesign) {
+          loadFromHistory(foundDesign);
+        } else {
+          // If not in local history, we might need to fetch it (e.g., if shared link)
+          // For now, if not in history, just go to category selection
+          setStep('category-selection'); 
+          setCategory(null);
+        }
+      }
+    };
+
+    window.addEventListener('hashchange', handleHashChange);
+    // Also check on initial load
+    handleHashChange();
+
+    return () => {
+      window.removeEventListener('hashchange', handleHashChange);
+    };
+  }, [history]); // Re-run if history changes to ensure deep links work with new items
+
 
   // Determine if form fields (for manual input) should be disabled
   // This avoids TypeScript's type narrowing within conditional JSX and the "unintentional comparison" error
@@ -348,11 +377,6 @@ function App() {
       ctx.font = '300 28px Inter, sans-serif';
       ctx.fillText('Design', centerX + 30, textY);
 
-      // URL
-      ctx.font = '12px Inter, sans-serif';
-      ctx.fillStyle = '#7bc143'; // brand-green
-      ctx.fillText('www.getdesign.cloud', centerX, 85);
-
       // Green Icon (Triangle) to the right of text
       const iconX = centerX + 100;
       const iconY = 40;
@@ -380,10 +404,10 @@ function App() {
     const contact = contactDetails;
     let message = "";
 
-    if (!result.imageUrl || result.status === 'pending') {
+    if (!result.imageUrl || result.status === 'pending_designer_review' || result.status === 'generating_by_designer') {
       alert(lang === 'en' 
-        ? "This design is still pending review by a designer. Please wait for it to be generated before requesting files."
-        : "تصميم هذا الموقع لا يزال قيد المراجعة من قبل المصمم. يرجى الانتظار حتى يتم إنشاؤه قبل طلب الملفات.");
+        ? "This design is still pending final generation or review by a designer. Please wait for it to be ready before requesting files."
+        : "تصميم هذا الموقع لا يزال قيد المراجعة النهائية من قبل المصمم. يرجى الانتظار حتى يصبح جاهزًا قبل طلب الملفات.");
       return;
     }
 
@@ -429,10 +453,10 @@ function App() {
   };
 
   const handleShare = async (result: GeneratedResult) => {
-    if (!result.imageUrl || result.status === 'pending') {
+    if (!result.imageUrl || result.status === 'pending_designer_review' || result.status === 'generating_by_designer') {
       alert(lang === 'en' 
-        ? "This design is still pending review by a designer. Please wait for it to be generated before sharing."
-        : "تصميم هذا الموقع لا يزال قيد المراجعة من قبل المصمم. يرجى الانتظار حتى يتم إنشاؤه قبل المشاركة.");
+        ? "This design is still pending final generation or review by a designer. Please wait for it to be ready before sharing."
+        : "تصميم هذا الموقع لا يزال قيد المراجعة النهائية من قبل المصمم. يرجى الانتظار حتى يصبح جاهزًا قبل المشاركة.");
       return;
     }
 
@@ -476,10 +500,10 @@ function App() {
   };
 
   const handleDownload = async (imageUrl: string, filename: string) => {
-    if (imageUrl.startsWith('/assets/pending-web-design.svg') || imageUrl === '') {
+    if (imageUrl.startsWith('/assets/pending-web-design.svg') || imageUrl === '' || imageUrl.includes('pending-web-design.svg')) {
       alert(lang === 'en' 
-        ? "This design is still pending review by a designer. Please wait for it to be generated before downloading."
-        : "تصميم هذا الموقع لا يزال قيد المراجعة من قبل المصمم. يرجى الانتظار حتى يتم إنشاؤه قبل التنزيل.");
+        ? "This design is still pending final generation or review by a designer. Please wait for it to be ready before downloading."
+        : "تصميم هذا الموقع لا يزال قيد المراجعة النهائية من قبل المصمم. يرجى الانتظار حتى يصبح جاهزًا قبل التنزيل.");
       return;
     }
 
@@ -997,17 +1021,17 @@ function App() {
 
              <div className="bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden shadow-2xl">
                 
-                {generatedResult.status === 'pending' || generatedResult.status === 'generating' ? (
+                {(generatedResult.status === 'pending_designer_review' || generatedResult.status === 'generating_by_designer') ? (
                   <div className="relative w-full aspect-video bg-[#0f0f0f] flex flex-col items-center justify-center text-center p-4">
                      {/* Placeholder for pending web design */}
                      <img 
-                        src="/assets/pending-web-design.svg" 
+                        src={generatedResult.imageUrl} // Use the draft image URL
                         alt="Pending Design" 
-                        className="w-32 h-32 mb-4 animate-pulse-slow" 
+                        className="w-full h-auto max-h-80 object-contain mb-4 animate-pulse-slow" 
                       />
-                     <h3 className="text-xl font-bold text-white mb-2">{t.task_status_pending}</h3>
+                     <h3 className="text-xl font-bold text-white mb-2">{generatedResult.status === 'pending_designer_review' ? t.design_status_pending_review_mockup : t.design_status_generating_by_designer}</h3>
                      <p className="text-gray-400 text-sm max-w-sm">{t.web_design_pending_message}</p>
-                     <p className="text-xs text-gray-500 mt-4">Task ID: {generatedResult.designTaskId}</p>
+                     {generatedResult.designTaskId && <p className="text-xs text-gray-500 mt-4">Task ID: {generatedResult.designTaskId}</p>}
                   </div>
                 ) : (generatedResult.type === 'web' || generatedResult.type === 'brochure') && generatedResult.images && generatedResult.images.length > 0 ? (
                   <div className="relative w-full aspect-video bg-[#0f0f0f] flex items-center justify-center group">
@@ -1065,7 +1089,9 @@ function App() {
                             generatedResult.type === 'identity' ? t.type_identity :
                             generatedResult.type === 'social' ? t.type_social :
                             t.type_brochure} 
-                            {generatedResult.status === 'pending' ? ` (${t.task_status_pending})` : ''} • {new Date(generatedResult.timestamp).toLocaleDateString()}
+                            {generatedResult.status === 'pending_designer_review' ? ` (${t.design_status_pending_review_mockup})` : 
+                             generatedResult.status === 'generating_by_designer' ? ` (${t.design_status_generating_by_designer})` : ''} 
+                             • {new Date(generatedResult.timestamp).toLocaleDateString()}
                          </p>
                          {generatedResult.templateLink && (
                            <a 
@@ -1083,22 +1109,22 @@ function App() {
                       <div className="flex flex-wrap gap-3 justify-center">
                          <button 
                            onClick={() => handleDownload(
-                              ((generatedResult.type === 'web' || generatedResult.type === 'brochure') && generatedResult.images && generatedResult.images.length > 0) && generatedResult.status !== 'pending'
+                              ((generatedResult.type === 'web' || generatedResult.type === 'brochure') && generatedResult.images && generatedResult.images.length > 0) && generatedResult.status === 'ready'
                                 ? generatedResult.images[currentImageIndex] 
                                 : generatedResult.imageUrl,
                               `GetDesign-${generatedResult.type}-${Date.now()}.png`
                            )}
                            className="flex items-center gap-2 px-6 py-3 bg-gray-800 hover:bg-gray-700 rounded-xl transition-colors font-medium text-white"
-                           disabled={generatedResult.status === 'pending'}
+                           disabled={generatedResult.status !== 'ready'}
                          >
-                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" /></svg>
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" /></svg>
                             {t.download_btn}
                          </button>
                          
                          <button 
                            onClick={() => handleShare(generatedResult)}
                            className="flex items-center gap-2 px-6 py-3 bg-blue-600 hover:bg-blue-500 rounded-xl transition-colors font-medium text-white"
-                           disabled={generatedResult.status === 'pending'}
+                           disabled={generatedResult.status !== 'ready'}
                          >
                             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" /></svg>
                             Share
@@ -1107,7 +1133,7 @@ function App() {
                          <button 
                            onClick={() => handleWhatsAppRequest(generatedResult)}
                            className="flex items-center gap-2 px-6 py-3 bg-[#25D366] hover:bg-[#20bd5a] text-black font-bold rounded-xl transition-colors shadow-lg shadow-green-900/20"
-                           disabled={generatedResult.status === 'pending'}
+                           disabled={generatedResult.status !== 'ready'}
                          >
                             <svg className="w-5 h-5" viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413Z"/></svg>
                             {t.whatsapp_btn}
@@ -1144,7 +1170,7 @@ function App() {
                    history.map(item => (
                      <div key={item.id} className="bg-black/50 border border-gray-800 rounded-lg p-3 hover:border-brand-green transition-colors cursor-pointer group" onClick={() => loadFromHistory(item)}>
                         <img 
-                          src={item.imageUrl || (item.status === 'pending' ? '/assets/pending-web-design.svg' : '')} 
+                          src={item.imageUrl || '/assets/pending-web-design.svg'} 
                           alt={item.type} 
                           className="w-full h-32 object-cover rounded-md mb-3" 
                         />
@@ -1152,7 +1178,8 @@ function App() {
                         <div className="flex justify-between items-center">
                            <span className="text-xs text-brand-green uppercase">
                               {item.type}
-                              {item.status === 'pending' && ` (${t.task_status_pending})`}
+                              {item.status === 'pending_designer_review' && ` (${t.design_status_pending_review_mockup})`}
+                              {item.status === 'generating_by_designer' && ` (${t.design_status_generating_by_designer})`}
                            </span>
                            <span className="text-xs text-gray-500">{new Date(item.timestamp).toLocaleDateString()}</span>
                         </div>

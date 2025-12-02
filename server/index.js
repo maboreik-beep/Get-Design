@@ -1,3 +1,4 @@
+
 // server/index.js
 import express from 'express';
 import dotenv from 'dotenv';
@@ -110,7 +111,7 @@ async function insertInitialTemplates() {
       category: 'logo',
       industry_keywords: JSON.stringify(['tech', 'technology', 'software', 'startup', 'digital', 'innovation', 'IT', 'AI', 'data']),
       prompt_hint: 'Design a clean, abstract, geometric logo for a tech company. Focus on a simple, memorable icon, modern typography, and a fresh color palette. Minimalist layout with ample negative space.',
-      thumbnail_url: '', // PASTE YOUR DIRECT GOOGLE DRIVE URL FOR LOGO TEMPLATE L1 HERE
+      thumbnail_url: '/assets/templates/logo-L1-minimalist-tech.jpg', // Placeholder, replace with your direct link
       generated_content_examples: JSON.stringify({ headline: 'TechFlow Innovations', body: 'Streamlining Tomorrow, Today', cta: 'Explore Solutions' })
     },
     {
@@ -120,7 +121,7 @@ async function insertInitialTemplates() {
       category: 'logo',
       industry_keywords: JSON.stringify(['gaming', 'esports', 'entertainment', 'interactive', 'virtual reality']),
       prompt_hint: 'Create a bold, dynamic logo with an edgy mascot or icon for a gaming company. Use strong contrasts, energetic colors, and modern, aggressive typography. Emphasize speed, competition, and immersive experiences.',
-      thumbnail_url: '', // PASTE YOUR DIRECT GOOGLE DRIVE URL FOR LOGO TEMPLATE L2 HERE
+      thumbnail_url: '/assets/templates/logo-L2-bold-gaming.jpg', // Placeholder, replace with your direct link
       generated_content_examples: JSON.stringify({ headline: 'Pixel Vanguard', body: 'Conquer Every Realm', cta: 'Join Now' })
     },
     // --- BRAND IDENTITY Templates ---
@@ -131,7 +132,7 @@ async function insertInitialTemplates() {
       category: 'brand_identity',
       industry_keywords: JSON.stringify(['luxury', 'fashion', 'jewelry', 'boutique', 'high-end', 'premium']),
       prompt_hint: 'Render an elegant and sophisticated brand identity kit flat-lay. Feature a refined logomark, classic serif typography, and a subdued color palette with metallic accents. Include items like embossed business cards, letterhead, and product packaging, highlighting quality and exclusivity.',
-      thumbnail_url: '', // PASTE YOUR DIRECT GOOGLE DRIVE URL FOR BRAND IDENTITY TEMPLATE BI1 HERE
+      thumbnail_url: '/assets/templates/identity-BI1-elegant-luxury.jpg', // Placeholder, replace with your direct link
       generated_content_examples: JSON.stringify({ headline: 'Eclat Couture', body: 'Redefining Opulence', cta: 'Discover Our Collection' })
     },
     {
@@ -141,7 +142,7 @@ async function insertInitialTemplates() {
       category: 'brand_identity',
       industry_keywords: JSON.stringify(['children', 'kids', 'toys', 'education', 'play', 'family']),
       prompt_hint: 'Design a whimsical and colorful brand identity kit flat-lay for a children\'s brand. Use a cheerful logotype with rounded letters, playful illustrations, and a bright color scheme. Items include fun business cards, stickers, and product tags, emphasizing joy and creativity.',
-      thumbnail_url: '', // PASTE YOUR DIRECT GOOGLE DRIVE URL FOR BRAND IDENTITY TEMPLATE BI2 HERE
+      thumbnail_url: '/assets/templates/identity-BI2-playful-children.jpg', // Placeholder, replace with your direct link
       generated_content_examples: JSON.stringify({ headline: 'Curio Kids Club', body: 'Where Imagination Takes Flight', cta: 'Explore & Play' })
     },
     // --- SOCIAL MEDIA Templates ---
@@ -152,7 +153,7 @@ async function insertInitialTemplates() {
       category: 'social_media',
       industry_keywords: JSON.stringify(['corporate', 'business', 'consulting', 'finance', 'professional services']),
       prompt_hint: 'Create a clean, minimalist social media post template for a professional business. Use a neutral color palette with one accent color, clear sans-serif typography, and subtle geometric elements. Focus on a clear message with minimal clutter.',
-      thumbnail_url: '', // PASTE YOUR DIRECT GOOGLE DRIVE URL FOR SOCIAL MEDIA TEMPLATE SM1 HERE
+      thumbnail_url: '/assets/templates/social-SM1-minimalist-business.jpg', // Placeholder, replace with your direct link
       generated_content_examples: JSON.stringify({ headline: 'Elevate Your Strategy', body: 'Expert Insights for Growth', cta: 'Read Our Whitepaper' })
     },
     {
@@ -162,7 +163,7 @@ async function insertInitialTemplates() {
       category: 'social_media',
       industry_keywords: JSON.stringify(['fitness', 'gym', 'health', 'wellness', 'sports', 'training']),
       prompt_hint: 'Design a bold, high-energy social media post template for a fitness brand. Use strong action imagery, vibrant colors, and impactful, distressed typography. Emphasize strength, motivation, and results.',
-      thumbnail_url: '', // PASTE YOUR DIRECT GOOGLE DRIVE URL FOR SOCIAL MEDIA TEMPLATE SM2 HERE
+      thumbnail_url: '/assets/templates/social-SM2-bold-fitness.jpg', // Placeholder, replace with your direct link
       generated_content_examples: JSON.stringify({ headline: 'Unleash Your Power', body: 'Transform Your Body, Mind, and Spirit', cta: 'Start Your Journey' })
     },
     // --- BROCHURE/CATALOG Templates ---
@@ -174,7 +175,7 @@ async function insertInitialTemplates() {
       category: 'brochure_landscape',
       industry_keywords: JSON.stringify(['tech', 'software', 'AI', 'robotics', 'innovation', 'future']),
       prompt_hint: 'Design a multi-page landscape brochure with a futuristic and sleek aesthetic. Incorporate glowing lines, abstract geometric patterns, and a dark theme. Use modern sans-serif fonts and clean data visualization elements. Emphasize innovation and advanced technology.',
-      thumbnail_url: '', // PASTE YOUR DIRECT GOOGLE DRIVE URL FOR BROCHURE LANDSCAPE TEMPLATE BL1 HERE
+      thumbnail_url: '/assets/templates/brochure-BL1-futuristic-tech.jpg', // Placeholder, replace with your direct link
       generated_content_examples: JSON.stringify({ headline: 'Pioneering Tomorrow\'s Solutions', body: 'Our advanced technological platforms are engineered to deliver unparalleled efficiency, driving your enterprise into a new era of digital excellence and innovation.', cta: 'Request a Live Demo' })
     },
     {
@@ -184,7 +185,7 @@ async function insertInitialTemplates() {
       category: 'brochure_landscape',
       industry_keywords: JSON.stringify(['travel', 'tourism', 'luxury resort', 'vacation', 'hospitality', 'destinations']),
       prompt_hint: 'Create an elegant landscape brochure for a luxury travel agency. Feature stunning photography of exotic destinations, sophisticated serif typography, and a spacious layout. Use a serene color palette with hints of gold, conveying relaxation and exclusivity.',
-      thumbnail_url: '', // PASTE YOUR DIRECT GOOGLE DRIVE URL FOR BROCHURE LANDSCAPE TEMPLATE BL2 HERE
+      thumbnail_url: '/assets/templates/brochure-BL2-elegant-travel.jpg', // Placeholder, replace with your direct link
       generated_content_examples: JSON.stringify({ headline: 'Your Journey, Reimagined', body: 'Indulge in bespoke travel experiences meticulously crafted to inspire, enchant, and create indelible memories across the globe.', cta: 'Book Your Escape' })
     },
     // Brochure-Catalog-Portrait
@@ -195,7 +196,7 @@ async function insertInitialTemplates() {
       category: 'brochure_portrait',
       industry_keywords: JSON.stringify(['corporate', 'consulting', 'business', 'finance', 'legal']),
       prompt_hint: 'Design a clean, minimalist portrait brochure for a corporate consulting firm. Use a professional blue/grey color scheme, crisp sans-serif typography, and a structured layout with clear sections. Focus on conveying professionalism and clarity.',
-      thumbnail_url: '', // PASTE YOUR DIRECT GOOGLE DRIVE URL FOR BROCHURE PORTRAIT TEMPLATE BP1 HERE
+      thumbnail_url: '/assets/templates/brochure-BP1-minimalist-corporate.jpg', // Placeholder, replace with your direct link
       generated_content_examples: JSON.stringify({ headline: 'Strategic Partnership for Success', body: 'We provide tailored consulting services designed to optimize your operations, enhance market position, and drive sustainable business growth.', cta: 'Schedule a Consultation' })
     },
     {
@@ -205,7 +206,7 @@ async function insertInitialTemplates() {
       category: 'brochure_portrait',
       industry_keywords: JSON.stringify(['education', 'school', 'university', 'learning', 'kids', 'youth']),
       prompt_hint: 'Create a vibrant, playful portrait brochure for an educational institution. Use a bright, inviting color palette, engaging illustrations, and fun, readable typography. Design for a young audience, emphasizing discovery and interactive learning.',
-      thumbnail_url: '', // PASTE YOUR DIRECT GOOGLE DRIVE URL FOR BROCHURE PORTRAIT TEMPLATE BP2 HERE
+      thumbnail_url: '/assets/templates/brochure-BP2-playful-education.jpg', // Placeholder, replace with your direct link
       generated_content_examples: JSON.stringify({ headline: 'Ignite a Passion for Learning', body: 'Our innovative programs and dedicated educators foster a dynamic environment where students thrive, explore, and achieve their fullest potential.', cta: 'Enroll Today' })
     },
     // Tri-Fold Flyer
@@ -216,7 +217,7 @@ async function insertInitialTemplates() {
       category: 'tri_fold_flyer',
       industry_keywords: JSON.stringify(['marketing', 'advertising', 'agency', 'promotion', 'sales']),
       prompt_hint: 'Design a bold and impactful tri-fold flyer for a marketing agency. Use strong visuals, contrasting colors, and energetic typography to grab attention. Structure clearly defined sections for services, benefits, and contact information.',
-      thumbnail_url: '', // PASTE YOUR DIRECT GOOGLE DRIVE URL FOR TRI-FOLD FLYER TEMPLATE TF1 HERE
+      thumbnail_url: '/assets/templates/brochure-TF1-bold-marketing.jpg', // Placeholder, replace with your direct link
       generated_content_examples: JSON.stringify({ headline: 'Supercharge Your Brand', body: 'Unlock unparalleled visibility and engagement with our innovative marketing strategies, designed to connect you with your audience and drive measurable results.', cta: 'Get Your Free Audit' })
     },
     // --- WEB DESIGN Templates ---
@@ -227,7 +228,7 @@ async function insertInitialTemplates() {
       category: 'website_design',
       industry_keywords: JSON.stringify(['software', 'cloud', 'AI', 'SaaS', 'platform', 'startup', 'web development']),
       prompt_hint: 'Design a responsive website layout with a futuristic, dark mode aesthetic. Incorporate glowing UI elements, abstract backgrounds, and modern sans-serif typography. Focus on clean data presentation, intuitive navigation, and engaging hero sections for a software product.',
-      thumbnail_url: '', // PASTE YOUR DIRECT GOOGLE DRIVE URL FOR WEB DESIGN TEMPLATE W1 HERE
+      thumbnail_url: '/assets/templates/web-W1-futuristic-software.jpg', // Placeholder, replace with your direct link
       generated_content_examples: JSON.stringify({ headline: 'Next-Gen AI Platform', body: 'Empower your business with intelligent automation and data-driven insights, seamlessly integrated into your workflow for unprecedented efficiency.', cta: 'Start Free Trial' })
     },
     {
@@ -237,7 +238,7 @@ async function insertInitialTemplates() {
       category: 'website_design',
       industry_keywords: JSON.stringify(['photography', 'art', 'portfolio', 'creative', 'gallery', 'artist']),
       prompt_hint: 'Create an elegant and minimalist website layout for a professional photography portfolio. Emphasize large, high-quality image displays, subtle hover effects, and sophisticated serif typography. Use a clean, monochromatic color scheme to let the visuals speak. Showcase work with grace and impact.',
-      thumbnail_url: '', // PASTE YOUR DIRECT GOOGLE DRIVE URL FOR WEB DESIGN TEMPLATE W2 HERE
+      thumbnail_url: '/assets/templates/web-W2-elegant-photography.jpg', // Placeholder, replace with your direct link
       generated_content_examples: JSON.stringify({ headline: 'Capturing Moments, Creating Art', body: 'Discover a curated collection of evocative imagery, each frame a testament to the beauty and emotion found in every moment.', cta: 'View Portfolio' })
     },
   ];
@@ -429,11 +430,11 @@ async function performWebDesignGeneration(designTask, contactDetails) {
     throw new Error("Server API Key not configured.");
   }
 
-  const { id: taskId, contact_id, business_data: businessDataJson, logo_base64: logoBase64String, brochure_base64: brochureBase64Json, zip_file_path: zipFilePath } = designTask;
+  const { id: taskId, contact_id, business_data: businessDataJson, logo_base64: logoBase64String, brochure_base664: brochureBase664Json, zip_file_path: zipFilePath } = designTask;
   
   let businessData = JSON.parse(businessDataJson);
   let logoBase64 = logoBase64String;
-  let brochureBase64 = brochureBase64Json ? JSON.parse(brochureBase64Json) : [];
+  let brochureBase64 = brochureBase664Json ? JSON.parse(brochureBase664Json) : [];
   let brochureTextContent = [];
   let brochureImageParts = [];
   let templateLink = "";
@@ -456,7 +457,7 @@ async function performWebDesignGeneration(designTask, contactDetails) {
           if (fileName.includes('logo') && !logoFromZip) {
             logoFromZip = `data:image/${ext.substring(1)};base64,${fileBase64}`;
           } else if (fileName.includes('brochure') && !brochureFromZip.length) {
-            brochureFromZip.push(`data:image/${ext.substring(1)};base664,${fileBase64}`);
+            brochureFromZip.push(`data:image/${ext.substring(1)};base64,${fileBase64}`);
           }
         } else if (['.txt', '.md'].includes(ext)) {
           const fileContent = fs.readFileSync(filePath, 'utf8');
@@ -721,15 +722,15 @@ async function performWebDesignGeneration(designTask, contactDetails) {
     businessData.industry,
     businessData.description,
     mainImageUrl,
-    templateLink,
+    selectedTemplate ? selectedTemplate.thumbnail_url : null, // Use thumbnail_url as template_link
     selectedTemplate ? selectedTemplate.id : null
   );
 
   return {
     id: designResult.lastID.toString(),
     templateId: selectedTemplate ? selectedTemplate.id : `GD-${designResult.lastID.toString().slice(-6)}`,
-    templateUrl: "",
-    templateTitle: `Concept GD-${designResult.lastID.toString().slice(-6)}`,
+    templateUrl: selectedTemplate ? selectedTemplate.thumbnail_url : null,
+    templateTitle: selectedTemplate ? selectedTemplate.id : `Concept GD-${designResult.lastID.toString().slice(-6)}`,
     searchQuery: `${designTask.design_type} design for ${businessData.name}`,
     imageUrl: mainImageUrl,
     images: resultImages,
@@ -1067,7 +1068,7 @@ app.post('/api/design-tasks', upload.single('zipFile'), async (req, res) => {
     res.status(201).json({
       id: `task-${result.lastID}`,
       designTaskId: result.lastID,
-      status: 'pending',
+      status: 'pending_designer_review', // Indicate draft is pending review
       type: type,
       imageUrl: '/assets/pending-web-design.svg', // Placeholder image
       timestamp: Date.now(),
@@ -1122,6 +1123,9 @@ app.get('/api/admin/design-tasks', authenticateAdmin, async (req, res) => {
 app.post('/api/admin/design-tasks/:taskId/generate', authenticateAdmin, async (req, res) => {
   const taskId = req.params.taskId;
 
+  // Respond immediately to the client that generation has started
+  res.status(202).json({ status: 'generating', message: 'AI generation started in background.' });
+
   // Execute AI generation in the background
   (async () => {
     let designTask;
@@ -1132,11 +1136,11 @@ app.post('/api/admin/design-tasks/:taskId/generate', authenticateAdmin, async (r
         console.error(`Background task failed: Design task ${taskId} not found.`);
         return;
       }
-      if (designTask.status !== 'pending' && designTask.status !== 'generating') { // Allow re-triggering 'generating' in case of crash
-        console.warn(`Background task for ${taskId} not re-triggered as status is ${designTask.status}.`);
+      if (designTask.status === 'generating') { // Prevent re-triggering if already generating
+        console.warn(`Background task for ${taskId} is already generating.`);
         return;
       }
-
+      
       // Update status to generating
       await db.run("UPDATE DesignTasks SET status = 'generating', updated_at = CURRENT_TIMESTAMP WHERE id = ?", taskId);
       
@@ -1193,9 +1197,6 @@ app.post('/api/admin/design-tasks/:taskId/generate', authenticateAdmin, async (r
       }
     }
   })();
-  
-  // Respond immediately to the client that generation has started
-  res.status(202).json({ status: 'generating', message: 'AI generation started in background.' });
 });
 
 
@@ -1356,144 +1357,4 @@ app.post('/api/generate-design', upload.single('zipFile'), async (req, res) => {
         `;
       } else {
         templateGuidancePrompt = `
-          DESIGN CONCEPT: Base the overall layout, composition, and visual elements on the following template description. Adapt its core aesthetics and structure to fit the new business. Replace generic elements with relevant content.
-          TEMPLATE DESCRIPTION: "${selectedTemplate.prompt_hint}"
-        `;
-      }
-      
-      // If no postContent, generate content for the design
-      const templateGeneratedContent = JSON.parse(selectedTemplate.generated_content_examples || '{}');
-
-      const contentGenerationPrompt = `
-        Based on the following business details and industry, and considering a template with these example content elements:
-        Business Name: "${businessData.name}"
-        Industry: "${businessData.industry}"
-        Description: "${businessData.description}"
-        
-        Generate a concise, impactful marketing headline, a short body text (1-2 sentences), and a clear call-to-action (CTA).
-        Use the template's example content as inspiration for tone and style, but tailor it to the current business and industry.
-        Example Headline: "${templateGeneratedContent.headline || 'Inspiring Headline'}"
-        Example Body: "${templateGeneratedContent.body || 'Compelling Body Text'}"
-        Example CTA: "${templateGeneratedContent.cta || 'Learn More'}"
-
-        Output ONLY in JSON format with keys "headline", "body", "cta".
-        Example: {"headline": "Your Title", "body": "Your description.", "cta": "Click Here"}
-      `;
-
-      try {
-        const contentAI = new GoogleGenAI({ apiKey: GEMINI_API_KEY });
-        const contentResponse = await contentAI.models.generateContent({
-          model: 'gemini-2.5-flash', // Use a text-only model for content generation
-          contents: [{ text: contentGenerationPrompt }],
-          config: {
-            responseMimeType: "application/json",
-            responseSchema: {
-              type: Type.OBJECT,
-              properties: {
-                headline: { type: Type.STRING },
-                body: { type: Type.STRING },
-                cta: { type: Type.STRING },
-              },
-              propertyOrdering: ["headline", "body", "cta"],
-            },
-          },
-        });
-        const contentJson = JSON.parse(contentResponse.text);
-        generatedHeadline = contentJson.headline || generatedHeadline;
-        generatedBody = contentJson.body || contentJson.text || generatedBody; // Fallback to contentJson.text if body is empty (sometimes model just gives raw text)
-        generatedCta = contentJson.cta || generatedCta;
-        console.log("Generated Content (AI):", generatedHeadline, generatedBody, generatedCta);
-
-      } catch (contentError) {
-        console.warn("Failed to generate content via AI:", contentError);
-        // Fallback to template examples or generic if AI content generation fails
-        generatedHeadline = templateGeneratedContent.headline || generatedHeadline;
-        generatedBody = templateGeneratedContent.body || generatedBody;
-        generatedCta = templateGeneratedContent.cta || generatedCta;
-      }
-    }
-
-
-    // --- Gemini Prompt Construction ---
-    const finalGeminiParts = [];
-
-    // Add selected template's thumbnail image as visual reference IF AVAILABLE
-    if (selectedTemplate && selectedTemplate.thumbnail_url && selectedTemplate.thumbnail_url.trim() !== '') {
-      try {
-        const imageResponse = await fetch(selectedTemplate.thumbnail_url);
-        if (!imageResponse.ok) {
-          throw new Error(`Failed to fetch template thumbnail from ${selectedTemplate.thumbnail_url}: ${imageResponse.statusText}`);
-        }
-        const imageBuffer = await imageResponse.arrayBuffer();
-        const base64Image = Buffer.from(imageBuffer).toString('base64');
-        const contentType = imageResponse.headers.get('content-type') || 'image/jpeg'; // Default to jpeg if unknown
-        finalGeminiParts.push({ inlineData: { mimeType: contentType, data: base64Image } });
-      } catch (imgFetchError) {
-        console.warn(`Could not fetch or process template thumbnail from URL: ${selectedTemplate.thumbnail_url}`, imgFetchError);
-        // Continue without the thumbnail if it fails, relying on text promptHint
-      }
-    }
-
-
-    // 1. Core textual instructions (template guidance, branding, description, content)
-    let industryInstruction = `
-      INDUSTRY CONTEXT: "${businessData.industry || 'General Business'}".
-      VISUAL STYLE PREFERENCE: "${businessData.visualStyle || 'Adapt to the template\'s dominant style'}"
-      COLOR PALETTE GUIDANCE: "${businessData.customColorPalette || 'Derive main colors from logo (if provided) or industry norms, ensuring a harmonious and professional look.'}"
-      DESIGN PRINCIPLES: Ensure the design is modern, professional, visually appealing, and directly relevant to the business and chosen style.
-    `;
-
-    let specificPrompt = '';
-    if (type === 'logo') {
-      specificPrompt = `DESIGN TYPE: Logo. Create a standalone logo. LOGO STYLE: "${businessData.logoStyle || '3d'}".`;
-    } else if (type === 'identity') {
-      specificPrompt = `DESIGN TYPE: Brand Identity Flat-Lay. Create a flat-lay visual showcasing brand identity elements (e.g., business card, letterhead, envelope, mockups).`;
-    } else if (type === 'social') {
-      specificPrompt = `DESIGN TYPE: Social Media Post. PLATFORM: "${businessData.socialPlatform || 'Instagram'}". Focus on creating a compelling visual for online sharing.`;
-    } else if (type === 'brochure') {
-      specificPrompt = `DESIGN TYPE: Brochure/Catalog. ORIENTATION: "${businessData.brochureOrientation}". SIZE: "${businessData.brochureSize}". PAGES: ${businessData.brochurePageCount}.`;
-    }
-    // Note: 'web' type now goes through Design Tasks, so it won't hit this path directly for generation.
-
-    finalGeminiParts.push({
-      text: `
-      ${templateGuidancePrompt || ''}
-      
-      BRANDING INTEGRATION:
-      - Business Name: "${businessData.name}" (Render legibly as per design. DO NOT add "Get Design" text to the logo or main content).
-      - Description Context: "${businessData.description}".
-      
-      ${brochureTextContent.length > 0 ? `\nADDITIONAL CONTENT CONTEXT FROM DOCUMENTS (Extract key themes, entities, and style):\n${brochureTextContent.join('\n\n')}\n` : ''}
-
-      TEXTUAL CONTENT TO DISPLAY IN THE DESIGN:
-      - PRIMARY HEADLINE: "${generatedHeadline}"
-      - BODY TEXT (concise): "${generatedBody}"
-      - CALL TO ACTION (if applicable): "${generatedCta}"
-
-      ${industryInstruction}
-      ${specificPrompt}
-      
-      RENDER QUALITY SETTINGS (FOR VISUAL CLARITY & DIGITAL PRESENTATION):
-      1. **Presentation**: Clean, sharp, and easy to understand. Optimized for digital display.
-      2. **Details**: Crisp lines, clear text, precise graphics.
-      3. **Lighting**: Even, soft ambient lighting to ensure all design elements are visible and legible.
-      4. **Reflections**: Subtle, functional reflections only if they enhance UI clarity, not distract.
-      5. **Post-Processing**: Balanced contrast and color correction for a vibrant, modern digital aesthetic.
-      
-      STRICT CONSTRAINT: The design must look ABSOLUTELY FINISHED, production-ready, and already EXISTS as a physical or digital product. NO sketches, NO blurry text, NO placeholder indicators.
-      `
-    });
-
-    // 2. Add logo image if provided (after template image and main text)
-    if (logoBase64) {
-      const parsedLogo = parseDataUrl(logoBase64);
-      if (parsedLogo) {
-        finalGeminiParts.push({ inlineData: { mimeType: parsedLogo.mimeType, data: parsedLogo.data } });
-      }
-    }
-
-    // 3. Add brochure images if provided (after template image, main text, and logo)
-    brochureImageParts.forEach(part => finalGeminiParts.push(part));
-
-    let resultImages = [];
-    let mainImageUrl
+          DESIGN CONCEPT: Base the overall layout, composition

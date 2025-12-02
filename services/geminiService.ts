@@ -1,5 +1,6 @@
+
 // services/geminiService.ts
-import { BusinessData, DesignType, GeneratedResult, GeneratedDesignStatus } from '../types';
+import { BusinessData, DesignType, GeneratedResult, GeneratedResultStatus } from '../types';
 
 /**
  * Centralized error handler for fetch API responses from backend.
@@ -86,7 +87,7 @@ export async function generateDesign(
     const result: GeneratedResult = await response.json();
     
     if (designType === 'web') {
-      onStatusUpdate("Website design request submitted for designer review.");
+      onStatusUpdate("Website design request submitted for designer review (draft generated).");
     } else {
       onStatusUpdate("Design complete!");
     }

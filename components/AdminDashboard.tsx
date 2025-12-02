@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { LeadRecord, GeneratedDesignRecord, Language, ConceptualTemplate, DesignType, VisualStyle, GeneratedContentExamples, TemplateCategory, DesignTask, DesignTaskStatus } from '../types';
 import { TRANSLATIONS, TEMPLATE_CATEGORIES } from '../constants';
