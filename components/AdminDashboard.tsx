@@ -4,7 +4,7 @@ import { TRANSLATIONS } from '../constants';
 
 export const AdminDashboard: React.FC = () => {
   const [lang] = useState<Language>('en'); // Assuming admin dashboard is primarily English for now
-  const t = TRANSLATIONS[lang];
+  const t = TRANSLATIONS[lang as Language];
 
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [username, setUsername] = useState('');
