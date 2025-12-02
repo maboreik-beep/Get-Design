@@ -1,39 +1,41 @@
 import React, { useRef, useState } from 'react';
 
-// Make FileUploadProps generic over TData which can be string or File
-interface FileUploadProps<TData extends string | File> {
+interface FileUploadProps<T> {
   label: string;
-  onFileSelect: (data: TData) => void; 
+  // If `multiple` is true, `data` will be `T[]`. If `multiple` is false, `data` will be `T | null`.
+  onFileSelect: (data: T | T[] | null) => void;
   accept?: string;
-  returnFileObject?: boolean; // This prop now guides the internal logic
+  multiple?: boolean; // New prop for multiple file selection
+  returnFileObject?: boolean; // If true, T is File or File[]
   disabled?: boolean;
 }
 
-// Update the component definition to be generic, defaulting TData to string
-export const FileUpload = <TData extends string | File = string>({ 
+export const FileUpload = <T extends string | File = string>({ 
   label, 
   onFileSelect, 
   accept = "image/png, image/jpeg, image/jpg", 
-  returnFileObject = false, // Keep default value here, it's an internal flag
+  multiple = false, // Default to single file upload
+  returnFileObject = false, 
   disabled = false 
-}: FileUploadProps<TData>) => {
+}: FileUploadProps<T>) => {
   const [preview, setPreview] = useState<string | null>(null);
+  const [fileNames, setFileNames] = useState<string[]>([]); // To display names for multiple files
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
+  const processFile = (file: File): Promise<T> => {
+    return new Promise((resolve, reject) => {
       if (returnFileObject) {
-        // For zip files or when raw file object is needed
-        setPreview(null); // No image preview for zip
-        // Cast onFileSelect to accept File, as we know returnFileObject is true
-        (onFileSelect as (data: File) => void)(file); 
-      } else {
-        // For image files, process to base64 and create preview
-        const img = new Image();
-        const reader = new FileReader();
+        resolve(file as T); // Return raw File object, cast as T
+        return;
+      }
 
-        reader.onload = (readerEvent) => {
+      const reader = new FileReader();
+      reader.onload = (readerEvent) => {
+        const dataUrl = readerEvent.target?.result as string;
+        const mimeType = file.type;
+
+        if (mimeType.startsWith('image/')) {
+          const img = new Image();
           img.onload = () => {
             const canvas = document.createElement('canvas');
             const ctx = canvas.getContext('2d');
@@ -60,21 +62,63 @@ export const FileUpload = <TData extends string | File = string>({
             canvas.height = height;
             
             if (ctx) {
-              ctx.drawImage(img, 0, 0, width, height);
-              
-              const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
-              
-              setPreview(dataUrl);
-              
-              const rawBase64 = dataUrl.split(',')[1];
-              // Cast onFileSelect to accept string, as we know returnFileObject is false
-              (onFileSelect as (data: string) => void)(rawBase64); 
+              // Return compressed image base64, cast as T
+              resolve(canvas.toDataURL('image/jpeg', 0.8) as T); 
+            } else {
+              reject(new Error("Could not get canvas context"));
             }
           };
-          img.src = readerEvent.target?.result as string;
-        };
-        
-        reader.readAsDataURL(file);
+          img.onerror = reject;
+          img.src = dataUrl;
+        } else {
+          // For non-image files (PDF, DOCX), return full data URL, cast as T
+          resolve(dataUrl as T);
+        }
+      };
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+  };
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) {
+      setPreview(null);
+      setFileNames([]);
+      // Fix: Pass null for single file selection, empty array for multiple.
+      onFileSelect(multiple ? [] : null); 
+      return;
+    }
+
+    setFileNames(Array.from(files).map(f => f.name));
+    setPreview(null); // Clear image preview for multi-file/non-image uploads
+
+    if (multiple) {
+      const processedResults: T[] = [];
+      for (const file of Array.from(files)) {
+        try {
+          const result = await processFile(file);
+          processedResults.push(result);
+        } catch (error: unknown) {
+          // Fix: Explicitly cast 'file' to 'File' and 'error' to 'Error'.
+          const fileName = (file as File).name || 'Unknown File';
+          console.error("Error processing file:", fileName, (error as Error).message);
+        }
+      }
+      onFileSelect(processedResults); 
+    } else {
+      // Single file logic (existing)
+      try {
+        const file = files[0];
+        const result = await processFile(file); // result is now of type T
+        if (typeof result === 'string' && file.type.startsWith('image/')) {
+          setPreview(result); // Show image preview for single image
+        }
+        onFileSelect(result); 
+      } catch (error: unknown) {
+        // Fix: Explicitly cast 'files[0]' to 'File' and 'error' to 'Error'.
+        const fileName = (files[0] as File)?.name || 'Unknown File';
+        console.error("Error processing single file:", fileName, (error as Error).message);
       }
     }
   };
@@ -98,11 +142,27 @@ export const FileUpload = <TData extends string | File = string>({
         accept={accept} 
         className="hidden" 
         disabled={disabled}
+        multiple={multiple} // Apply multiple prop to input
       />
       
-      {preview && !returnFileObject ? ( // Only show image preview if it's an image upload
+      {/* Conditional rendering for preview and labels */}
+      {preview && !multiple && !returnFileObject ? ( // Single image preview
         <img src={preview} alt="File Preview" className="h-full w-auto object-contain rounded-md" />
-      ) : (
+      ) : fileNames.length > 0 ? ( // Display file names for multiple/non-image files
+        <div className="flex flex-col items-center justify-center h-full max-h-full overflow-y-auto">
+          <svg className={`w-12 h-12 mb-4 transition-colors ${disabled ? 'text-gray-700' : 'text-gray-400 group-hover:text-brand-green'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+          </svg>
+          <p className={`font-medium transition-colors ${disabled ? 'text-gray-600' : 'text-gray-400 group-hover:text-white'} mb-2`}>
+            {fileNames.length === 1 ? fileNames[0] : `${fileNames.length} files selected`}
+          </p>
+          {fileNames.length > 1 && (
+            <ul className="text-xs text-gray-500 max-h-16 overflow-y-auto custom-scrollbar">
+              {fileNames.map((name, index) => <li key={index}>{name}</li>)}
+            </ul>
+          )}
+        </div>
+      ) : ( // Default upload state
         <>
           <svg className={`w-12 h-12 mb-4 transition-colors ${disabled ? 'text-gray-700' : 'text-gray-400 group-hover:text-brand-green'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />

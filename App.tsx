@@ -9,7 +9,7 @@ import {
   InputMode // New InputMode type
 } from './types';
 import { TRANSLATIONS, WEBSITE_PAGES, SUPPORT_NUMBER } from './constants'; // Removed GOOGLE_SCRIPT_URL
-import { generateDesign } from './services/geminiService';
+import { generateDesign } from './services/geminiService'; // Fix: Now correctly importing named export
 import { Logo } from './components/Logo';
 import { FileUpload } from './components/FileUpload';
 import { AdminDashboard } from './components/AdminDashboard';
@@ -52,7 +52,7 @@ function App() {
 
   // Uploads
   const [logoBase64, setLogoBase64] = useState<string | null>(null); // For branding (manual form)
-  const [brochureBase64, setBrochureBase64] = useState<string | null>(null); // For content (manual form)
+  const [brochureBase64, setBrochureBase64] = useState<string[] | null>(null); // For content (manual form) - Now array
   const [zipFile, setZipFile] = useState<File | null>(null); // New state for zip upload
 
   // Results & History
@@ -263,16 +263,17 @@ function App() {
       const dataForBackend: BusinessData = {
         ...businessData,
         contactId: contactDetails.id, // Ensure contactId is passed
+        // brochureBase64 is passed via `businessData` if in form mode
+        // For zip mode, `zipFile` is passed and backend extracts content
       };
 
       const result = await generateDesign(
         designType,
-        'text', // Mode is inferred by backend based on zipFile presence
+        inputMode === 'form' ? 'text' : 'zip', // Mode is inferred by backend based on zipFile presence
         dataForBackend,
-        inputMode === 'form' ? (logoBase64 || undefined) : undefined, // Only send if form mode
-        inputMode === 'form' ? (brochureBase64 || undefined) : undefined, // Only send if form mode
+        inputMode === 'form' ? (logoBase64 || null) : null, // Only send if form mode
         (status) => setLoadingStatus(status), // Update Status Callback
-        inputMode === 'zip' ? zipFile : undefined // Pass zipFile if in zip mode
+        inputMode === 'zip' ? zipFile : null // Pass zipFile if in zip mode
       );
 
       setGeneratedResult(result);
@@ -375,10 +376,12 @@ function App() {
     let message = "";
 
     // 1. Prepare Message
+    let templateRef = result.templateId ? ` (Template ID: ${result.templateId})` : '';
+
     if (result.type === 'web') {
-      message = `Hi, I am ${contact.name || "User"} from ${contact.company || "Company"}. I am interested to publish this website design concept (see attached image). Please let me know the time and cost.`;
+      message = `Hi, I am ${contact.name || "User"} from ${contact.company || "Company"}. I am interested to publish this website design concept${templateRef} (see attached image). Please let me know the time and cost.`;
     } else {
-      message = `Hi, I am ${contact.name || "User"} from ${contact.company || "Company"}. I am interested to get the ready to use and open-source files for this design concept (see attached image). Please let me know the time and cost.`;
+      message = `Hi, I am ${contact.name || "User"} from ${contact.company || "Company"}. I am interested to get the ready to use and open-source files for this design concept${templateRef} (see attached image). Please let me know the time and cost.`;
     }
     
     // 2. Identify image to attach
@@ -461,7 +464,6 @@ function App() {
       link.href = url;
       link.download = filename;
       document.body.appendChild(link);
-      link.click();
       document.body.removeChild(link);
       URL.revokeObjectURL(url);
     } else {
@@ -884,10 +886,12 @@ function App() {
 
                         <div className="mt-4">
                           <label className="block text-sm font-medium text-gray-400 mb-2">{t.upload_brochure_label}</label>
-                          {/* Use string type for image uploads (base64) */}
+                          {/* Use string[] type for multiple brochure uploads (base64) */}
                           <FileUpload<string> 
-                              label={t.upload_brochure_label}
-                              onFileSelect={setBrochureBase64}
+                              label={brochureBase64 && brochureBase64.length > 0 ? `${brochureBase64.length} files loaded` : t.upload_brochure_label}
+                              onFileSelect={setBrochureBase64} // setBrochureBase64 expects string[]
+                              accept="image/png, image/jpeg, application/pdf, application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                              multiple={true}
                               disabled={isDisabledForFormFields} // Use the helper variable
                             />
                         </div>
@@ -915,10 +919,12 @@ function App() {
                         
                         <div className="mt-4">
                           <label className="block text-sm font-medium text-gray-400 mb-2">{t.upload_brochure_label}</label>
-                          {/* Use string type for image uploads (base64) */}
+                          {/* Use string[] type for multiple brochure uploads (base64) */}
                           <FileUpload<string> 
-                              label={t.upload_brochure_label}
+                              label={brochureBase64 && brochureBase64.length > 0 ? `${brochureBase64.length} files loaded` : t.upload_brochure_label}
                               onFileSelect={setBrochureBase64}
+                              accept="image/png, image/jpeg, application/pdf, application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                              multiple={true}
                               disabled={isDisabledForFormFields} // Use the helper variable
                             />
                         </div>
