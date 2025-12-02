@@ -62,6 +62,7 @@ export const FileUpload = <T extends string | File = string>({
             canvas.height = height;
             
             if (ctx) {
+              ctx.drawImage(img, 0, 0, width, height);
               // Return compressed image base64, cast as T
               resolve(canvas.toDataURL('image/jpeg', 0.8) as T); 
             } else {
@@ -85,42 +86,45 @@ export const FileUpload = <T extends string | File = string>({
     if (!files || files.length === 0) {
       setPreview(null);
       setFileNames([]);
-      // Fix: Pass null for single file selection, empty array for multiple.
+      // Pass null for single file selection, empty array for multiple.
       onFileSelect(multiple ? [] : null); 
       return;
     }
 
-    setFileNames(Array.from(files).map(f => f.name));
+    // Convert FileList to an array of File objects for easier and safer typing
+    const fileListArray = Array.from(files);
+    setFileNames(fileListArray.map(f => f.name));
     setPreview(null); // Clear image preview for multi-file/non-image uploads
 
     if (multiple) {
       const processedResults: T[] = [];
-      for (const file of Array.from(files)) {
+      for (const file of fileListArray) {
         try {
           const result = await processFile(file);
           processedResults.push(result);
         } catch (error: unknown) {
-          // Fix: Safely handle 'error' which is of type 'unknown'.
+          // Safely handle 'error' which is of type 'unknown'.
           // 'file' is correctly typed as 'File' here from the Array.from(files) iteration.
           const fileName = file.name || 'Unknown File';
-          console.error("Error processing file:", fileName, error instanceof Error ? error.message : String(error));
+          console.error(`Error processing file ${fileName}:`, error instanceof Error ? error.message : String(error));
         }
       }
       onFileSelect(processedResults); 
     } else {
       // Single file logic (existing)
       try {
-        const file = files[0]; // 'files[0]' is guaranteed to be 'File' here due to the initial length check.
+        // 'fileListArray[0]' is guaranteed to be 'File' here due to the initial length check.
+        const file = fileListArray[0]; 
         const result = await processFile(file); // result is now of type T
         if (typeof result === 'string' && file.type.startsWith('image/')) {
           setPreview(result); // Show image preview for single image
         }
         onFileSelect(result); 
       } catch (error: unknown) {
-        // Fix: Safely handle 'error' which is of type 'unknown'.
-        // 'files[0]' is guaranteed to be 'File' here due to the initial length check.
-        const fileName = files[0].name || 'Unknown File';
-        console.error("Error processing single file:", fileName, error instanceof Error ? error.message : String(error));
+        // Safely handle 'error' which is of type 'unknown'.
+        // 'fileListArray[0]' is guaranteed to be 'File' here due to the initial length check.
+        const fileName = fileListArray[0]?.name || 'Unknown File'; 
+        console.error(`Error processing single file ${fileName}:`, error instanceof Error ? error.message : String(error));
       }
     }
   };
@@ -153,7 +157,7 @@ export const FileUpload = <T extends string | File = string>({
       ) : fileNames.length > 0 ? ( // Display file names for multiple/non-image files
         <div className="flex flex-col items-center justify-center h-full max-h-full overflow-y-auto">
           <svg className={`w-12 h-12 mb-4 transition-colors ${disabled ? 'text-gray-700' : 'text-gray-400 group-hover:text-brand-green'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
           </svg>
           <p className={`font-medium transition-colors ${disabled ? 'text-gray-600' : 'text-gray-400 group-hover:text-white'} mb-2`}>
             {fileNames.length === 1 ? fileNames[0] : `${fileNames.length} files selected`}
@@ -167,7 +171,7 @@ export const FileUpload = <T extends string | File = string>({
       ) : ( // Default upload state
         <>
           <svg className={`w-12 h-12 mb-4 transition-colors ${disabled ? 'text-gray-700' : 'text-gray-400 group-hover:text-brand-green'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
           </svg>
           <p className={`font-medium transition-colors ${disabled ? 'text-gray-600' : 'text-gray-400 group-hover:text-white'}`}>
             {label}

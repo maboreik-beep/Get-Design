@@ -27,10 +27,13 @@ export const AdminDashboard: React.FC = () => {
   // Template Modal State
   const [showTemplateModal, setShowTemplateModal] = useState(false);
   const [editingTemplate, setEditingTemplate] = useState<ConceptualTemplate | null>(null);
-  const [templateForm, setTemplateForm] = useState<Omit<ConceptualTemplate, 'industryKeywords' | 'generatedContentExamples'> & {
-    industryKeywords: string, // For form input
-    generatedContentExamples: string, // For form input
-  }>({
+  
+  interface TemplateFormState extends Omit<ConceptualTemplate, 'industryKeywords' | 'generatedContentExamples'> {
+    industryKeywords: string; // For form input
+    generatedContentExamples: string; // For form input
+  }
+
+  const [templateForm, setTemplateForm] = useState<TemplateFormState>({
     id: '',
     type: 'logo',
     visualStyle: 'minimalist',
@@ -482,7 +485,7 @@ export const AdminDashboard: React.FC = () => {
                             </a>
                           </td>
                           <td className="p-4 text-gray-400 text-sm">{lead.phone}</td>
-                          <td className="p-4 text-gray-300 text-sm capitalize">{lead.design_interest}</td>
+                          <td className="p-4 text-gray-300 text-sm capitalize">{t[lead.design_interest as keyof typeof t] as string || lead.design_interest}</td>
                         </tr>
                       ))
                     )}

@@ -642,7 +642,7 @@ app.post('/api/generate-design', upload.single('zipFile'), async (req, res) => {
         });
         const contentJson = JSON.parse(contentResponse.text);
         generatedHeadline = contentJson.headline || generatedHeadline;
-        generatedBody = contentJson.body || generatedBody;
+        generatedBody = contentJson.body || contentJson.text || generatedBody; // Fallback to contentJson.text if body is empty (sometimes model just gives raw text)
         generatedCta = contentJson.cta || generatedCta;
         console.log("Generated Content (AI):", generatedHeadline, generatedBody, generatedCta);
 
@@ -1188,12 +1188,32 @@ app.delete('/api/admin/conceptual-templates/:id', authenticateAdmin, async (req,
 });
 
 
-// Serve static files from the Vite build output
-app.use(express.static(path.join(__dirname, '../dist')));
+// Middleware to explicitly prevent caching for index.html
+app.get('/', (req, res, next) => {
+    // If the request is specifically for the root HTML, set no-cache headers
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate'); // HTTP 1.1.
+    res.setHeader('Pragma', 'no-cache'); // HTTP 1.0.
+    res.setHeader('Expires', '0'); // Proxies.
+    // Send the file, then prevent further middleware from processing it
+    return res.sendFile(path.join(__dirname, '../dist/index.html'));
+});
+
+// Serve static files from the Vite build output (these should be cache-busted by Vite hashes)
+app.use(express.static(path.join(__dirname, '../dist'), {
+    // For hashed assets (e.g., assets/index-xxxxxxxx.js), a long max-age is fine
+    maxAge: '1y', // Cache assets for 1 year
+    immutable: true, // Tell proxies/browsers that these files won't change
+    lastModified: true,
+    etag: true,
+}));
 
 // For any other routes, serve the index.html (React app)
 // This ensures that refreshing or direct access to client-side routes works
 app.get('*', (req, res) => {
+  // Ensure index.html is *always* sent with no-cache headers when served as a fallback
+  res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
   res.sendFile(path.join(__dirname, '../dist/index.html'));
 });
 
