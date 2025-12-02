@@ -73,6 +73,30 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ PUBLIC_APP_URL }
     }
   }, [isAuthenticated, activeTab, filterTemplateCategory, filterDesignTaskStatus]); // Added filterDesignTaskStatus
 
+  // Polling for Design Tasks
+  useEffect(() => {
+    let intervalId: number | null = null;
+    if (isAuthenticated && activeTab === 'design-tasks' && !loading) {
+      // Check if there are any pending or generating tasks
+      const hasActiveTasks = designTasks.some(task => 
+        task.status === 'pending' || task.status === 'generating'
+      );
+      
+      if (hasActiveTasks) {
+        intervalId = setInterval(() => {
+          fetchDesignTasks();
+        }, 10000); // Poll every 10 seconds
+      }
+    }
+
+    return () => {
+      if (intervalId !== null) {
+        clearInterval(intervalId);
+      }
+    };
+  }, [isAuthenticated, activeTab, designTasks.length, loading, filterDesignTaskStatus]); // Depend on relevant states
+
+
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
@@ -193,7 +217,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ PUBLIC_APP_URL }
   };
 
   const fetchDesignTasks = async () => {
-    setLoading(true);
+    setLoading(true); // Keep loading true during polling to prevent re-triggering fetches
     setDataError(null);
     try {
       const queryParams = new URLSearchParams();
@@ -351,16 +375,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ PUBLIC_APP_URL }
     if (!window.confirm("Are you sure you want to trigger AI generation for this website task? This will consume AI credits.")) {
       return;
     }
-    setLoading(true);
+    // Optimistic update
+    setDesignTasks(prev => prev.map(task => 
+      task.id === taskId ? { ...task, status: 'generating' } : task
+    ));
+    setDataError(null); // Clear previous errors
+
     try {
-      // Optimistic update
-      setDesignTasks(prev => prev.map(task => 
-        task.id === taskId ? { ...task, status: 'generating' } : task
-      ));
-      
       const result = await triggerWebDesignGeneration(taskId, (status) => console.log(`Task ${taskId} status: ${status}`));
       console.log("AI Generation Result:", result);
-      await fetchDesignTasks(); // Refresh list to show completed status
+      // Polling will eventually catch the completed status
     } catch (err: any) {
       console.error("Failed to trigger web design generation:", err);
       setDataError(err.message || t.error_generic);
@@ -368,7 +392,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ PUBLIC_APP_URL }
         task.id === taskId ? { ...task, status: 'failed' } : task // Revert status on error
       ));
     } finally {
-      setLoading(false);
+      // setLoading(false); // Do not set loading to false here, polling handles status updates
     }
   };
 
@@ -394,7 +418,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ PUBLIC_APP_URL }
       a.href = url;
       a.download = `${type}-export-${new Date().toISOString().slice(0,10)}.xlsx`;
       document.body.appendChild(a);
-      a.click();
       a.remove();
       window.URL.revokeObjectURL(url);
 

@@ -456,7 +456,7 @@ async function performWebDesignGeneration(designTask, contactDetails) {
           if (fileName.includes('logo') && !logoFromZip) {
             logoFromZip = `data:image/${ext.substring(1)};base64,${fileBase64}`;
           } else if (fileName.includes('brochure') && !brochureFromZip.length) {
-            brochureFromZip.push(`data:image/${ext.substring(1)};base64,${fileBase64}`);
+            brochureFromZip.push(`data:image/${ext.substring(1)};base664,${fileBase64}`);
           }
         } else if (['.txt', '.md'].includes(ext)) {
           const fileContent = fs.readFileSync(filePath, 'utf8');
@@ -736,7 +736,6 @@ async function performWebDesignGeneration(designTask, contactDetails) {
     timestamp: Date.now(),
     type: designTask.design_type,
     data: businessData,
-    templateLink: templateLink,
     contactId: contact_id,
   };
 }
@@ -1123,73 +1122,80 @@ app.get('/api/admin/design-tasks', authenticateAdmin, async (req, res) => {
 app.post('/api/admin/design-tasks/:taskId/generate', authenticateAdmin, async (req, res) => {
   const taskId = req.params.taskId;
 
-  try {
-    const designTask = await db.get("SELECT * FROM DesignTasks WHERE id = ?", taskId);
-    if (!designTask) {
-      return res.status(404).json({ error: "Design task not found." });
-    }
-    if (designTask.status !== 'pending') {
-      return res.status(400).json({ error: `Design task is already ${designTask.status}.` });
-    }
+  // Execute AI generation in the background
+  (async () => {
+    let designTask;
+    let contactDetails;
+    try {
+      designTask = await db.get("SELECT * FROM DesignTasks WHERE id = ?", taskId);
+      if (!designTask) {
+        console.error(`Background task failed: Design task ${taskId} not found.`);
+        return;
+      }
+      if (designTask.status !== 'pending' && designTask.status !== 'generating') { // Allow re-triggering 'generating' in case of crash
+        console.warn(`Background task for ${taskId} not re-triggered as status is ${designTask.status}.`);
+        return;
+      }
 
-    // Update status to generating
-    await db.run("UPDATE DesignTasks SET status = 'generating', updated_at = CURRENT_TIMESTAMP WHERE id = ?", taskId);
-    
-    // Get contact details for email notification
-    const contactDetails = await db.get("SELECT email, name FROM Leads WHERE id = ?", designTask.contact_id);
+      // Update status to generating
+      await db.run("UPDATE DesignTasks SET status = 'generating', updated_at = CURRENT_TIMESTAMP WHERE id = ?", taskId);
+      
+      // Get contact details for email notification
+      contactDetails = await db.get("SELECT email, name FROM Leads WHERE id = ?", designTask.contact_id);
 
-    // Perform the actual AI generation for the web design
-    const generatedDesign = await performWebDesignGeneration(designTask, contactDetails);
+      // Perform the actual AI generation for the web design
+      const generatedDesign = await performWebDesignGeneration(designTask, contactDetails);
 
-    // Update DesignTask with completed status and link to generated design
-    await db.run(
-      "UPDATE DesignTasks SET status = 'completed', generated_design_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
-      generatedDesign.id, taskId
-    );
+      // Update DesignTask with completed status and link to generated design
+      await db.run(
+        "UPDATE DesignTasks SET status = 'completed', generated_design_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+        generatedDesign.id, taskId
+      );
 
-    // Send email to user that design is ready
-    if (contactDetails && contactDetails.email) {
-      const designLink = `${process.env.PUBLIC_APP_URL || 'https://www.getdesign.cloud'}#result-${generatedDesign.id}`;
-      const mailOptions = {
-        from: process.env.SENDER_EMAIL,
-        to: contactDetails.email,
-        subject: `Your Website Design is Ready from Get Design AI!`,
-        html: `
-          <p>Dear ${contactDetails.name || 'User'},</p>
-          <p>Great news! Your website design concept for "${JSON.parse(designTask.business_data).name}" has been generated and is ready for your review.</p>
-          <p>You can view your design here: <a href="${designLink}">${designLink}</a></p>
-          <img src="${generatedDesign.imageUrl}" alt="Your Website Design" style="max-width: 100%; height: auto; margin: 20px 0;">
-          <p>Best regards,</p>
-          <p>The Get Design AI Team</p>
-        `,
-        attachments: [{
-          filename: `${JSON.parse(designTask.business_data).name}_website_design.png`,
-          path: generatedDesign.imageUrl.startsWith('data:image') ? Buffer.from(generatedDesign.imageUrl.split(',')[1], 'base64') : generatedDesign.imageUrl,
-          cid: 'unique@getdesign.cloud'
-        }]
-      };
-      try {
-        await transporter.sendMail(mailOptions);
-        console.log("Website design ready email sent to:", contactDetails.email);
-      } catch (mailError) {
-        console.error("Failed to send website ready email:", mailError);
+      // Send email to user that design is ready
+      if (contactDetails && contactDetails.email) {
+        const designLink = `${process.env.PUBLIC_APP_URL || 'https://www.getdesign.cloud'}#result-${generatedDesign.id}`;
+        const mailOptions = {
+          from: process.env.SENDER_EMAIL,
+          to: contactDetails.email,
+          subject: `Your Website Design is Ready from Get Design AI!`,
+          html: `
+            <p>Dear ${contactDetails.name || 'User'},</p>
+            <p>Great news! Your website design concept for "${JSON.parse(designTask.business_data).name}" has been generated and is ready for your review.</p>
+            <p>You can view your design here: <a href="${designLink}">${designLink}</a></p>
+            <img src="${generatedDesign.imageUrl}" alt="Your Website Design" style="max-width: 100%; height: auto; margin: 20px 0;">
+            <p>Best regards,</p>
+            <p>The Get Design AI Team</p>
+          `,
+          attachments: [{
+            filename: `${JSON.parse(designTask.business_data).name}_website_design.png`,
+            path: generatedDesign.imageUrl.startsWith('data:image') ? Buffer.from(generatedDesign.imageUrl.split(',')[1], 'base64') : generatedDesign.imageUrl,
+            cid: 'unique@getdesign.cloud'
+          }]
+        };
+        try {
+          await transporter.sendMail(mailOptions);
+          console.log("Website design ready email sent to:", contactDetails.email);
+        } catch (mailError) {
+          console.error("Failed to send website ready email for task:", taskId, mailError);
+        }
+      }
+
+    } catch (error) {
+      console.error(`Background generation task ${taskId} failed:`, error);
+      await db.run("UPDATE DesignTasks SET status = 'failed', updated_at = CURRENT_TIMESTAMP WHERE id = ?", taskId); // Mark as failed
+      // No response can be sent to client from here, as client already received 202.
+    } finally {
+      // Clean up temporary zip extraction directory if it exists and was created for this task
+      const task = await db.get("SELECT zip_file_path FROM DesignTasks WHERE id = ?", taskId);
+      if (task?.zip_file_path && fs.existsSync(task.zip_file_path)) {
+        try { await promisify(fs.rm)(task.zip_file_path, { recursive: true, force: true }); } catch (e) { console.error("Error cleaning up task's temp zip directory:", e); }
       }
     }
-
-    res.json(generatedDesign);
-
-  } catch (error) {
-    console.error(`Error generating web design for task ${taskId}:`, error);
-    await db.run("UPDATE DesignTasks SET status = 'failed', updated_at = CURRENT_TIMESTAMP WHERE id = ?", taskId); // Mark as failed
-    const errorMessage = handleGeminiError(error);
-    res.status(500).json({ error: errorMessage || "Failed to generate website design." });
-  } finally {
-    // Clean up temporary zip extraction directory if it exists and was created for this task
-    const task = await db.get("SELECT zip_file_path FROM DesignTasks WHERE id = ?", taskId);
-    if (task?.zip_file_path && fs.existsSync(task.zip_file_path)) {
-      try { await promisify(fs.rm)(task.zip_file_path, { recursive: true, force: true }); } catch (e) { console.error("Error cleaning up task's temp zip directory:", e); }
-    }
-  }
+  })();
+  
+  // Respond immediately to the client that generation has started
+  res.status(202).json({ status: 'generating', message: 'AI generation started in background.' });
 });
 
 
@@ -1232,7 +1238,7 @@ app.post('/api/generate-design', upload.single('zipFile'), async (req, res) => {
       const files = await promisify(fs.readdir)(tempDir);
       for (const file of files) {
         const filePath = path.join(tempDir, file);
-        const ext = path.path.extname(file).toLowerCase(); // Changed from path.extname directly
+        const ext = path.extname(file).toLowerCase();
         const fileName = path.basename(file).toLowerCase();
 
         if (['.png', '.jpg', '.jpeg', '.webp'].includes(ext)) {
@@ -1490,80 +1496,4 @@ app.post('/api/generate-design', upload.single('zipFile'), async (req, res) => {
     brochureImageParts.forEach(part => finalGeminiParts.push(part));
 
     let resultImages = [];
-    let mainImageUrl = "";
-
-    // For Brochure, generate multiple pages
-    if (type === 'brochure' && businessData.brochurePageCount && businessData.brochurePageCount > 1) {
-      const brochureGenerationPromises = [];
-      for (let i = 0; i < businessData.brochurePageCount; i++) {
-        const pageSpecificParts = [...finalGeminiParts, { text: `PAGE FOCUS: Page ${i + 1} of ${businessData.brochurePageCount}. Ensure content flow and design consistency.` }];
-        brochureGenerationPromises.push(ai.models.generateContent({
-          model: 'gemini-2.5-flash-image', 
-          contents: { parts: pageSpecificParts },
-          config: {
-            imageConfig: {
-              aspectRatio: businessData.brochureOrientation === 'landscape' ? "16:9" : "3:4",
-            }
-          }
-        }));
-      }
-      const brochureResponses = await Promise.all(brochureGenerationPromises);
-      for (const response of brochureResponses) {
-        const candidate = response.candidates?.[0];
-        if (candidate?.content?.parts) {
-          for (const part of candidate.content.parts) {
-            if (part.inlineData) {
-              resultImages.push(`data:image/png;base64,${part.inlineData.data}`);
-            }
-          }
-        }
-      }
-      mainImageUrl = resultImages[0] || '';
-
-    } else {
-      // Single image generation for logo, identity, social, or single-page brochure
-      const response = await ai.models.generateContent({
-        model: 'gemini-2.5-flash-image', // Use the flash image model
-        contents: {
-          parts: finalGeminiParts
-        },
-        config: {
-          imageConfig: {
-            aspectRatio: aspectRatio, // Dynamic aspect ratio
-          }
-        }
-      });
-
-      const candidate = response.candidates?.[0];
-      if (candidate?.content?.parts) {
-        for (const part of candidate.content.parts) {
-          if (part.inlineData) {
-            mainImageUrl = `data:image/png;base64,${part.inlineData.data}`;
-            resultImages = [mainImageUrl];
-            break;
-          }
-        }
-      }
-    }
-
-    if (!mainImageUrl) throw new Error("The AI model did not return any images. Please try again or refine your prompt.");
-
-    // Save design to database
-    const designResult = await db.run(
-      "INSERT INTO GeneratedDesigns (contact_id, design_type, business_name, industry, description, image_url, template_link, conceptual_template_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-      businessData.contactId,
-      type,
-      businessData.name,
-      businessData.industry,
-      businessData.description,
-      mainImageUrl, // Use the first generated image as main
-      selectedTemplate ? (selectedTemplate.thumbnail_url || '') : '',
-      selectedTemplate ? selectedTemplate.id : null
-    );
-
-    res.json({
-      id: designResult.lastID.toString(),
-      templateId: selectedTemplate ? selectedTemplate.id : `GD-${designResult.lastID.toString().slice(-6)}`,
-      templateUrl: "", // Not used currently for this flow
-      templateTitle: `Concept GD-${designResult.lastID.toString().slice(-6)}`,
-      searchQuery: `${type} design for ${business
+    let mainImageUrl
