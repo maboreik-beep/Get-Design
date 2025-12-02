@@ -300,7 +300,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ PUBLIC_APP_URL }
         throw new Error("Generated Content Examples must be valid JSON.");
       }
       
-      const payload: Omit<ConceptualTemplate, 'id'> & { id?: string } = {
+      const payload: Omit<ConceptualTemplate, 'industryKeywords' | 'generatedContentExamples'> & {
+        industryKeywords: string[]; // Convert back to array
+        generatedContentExamples: GeneratedContentExamples; // Convert back to object
+        id?: string; // ID is optional for new templates
+      } = {
         id: templateForm.id,
         type: templateForm.type,
         visualStyle: templateForm.visualStyle,

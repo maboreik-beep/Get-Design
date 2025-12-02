@@ -103,7 +103,7 @@ export const FileUpload = <T extends string | File = string>({
           const result = await processFile(file);
           processedResults.push(result);
         } catch (error: unknown) {
-          const fileName = (error instanceof Error && file.name) ? file.name : 'Unknown File'; // Safely access file.name
+          const fileName = (file && file.name) ? file.name : 'Unknown File'; // Safely access file.name
           console.error(`Error processing file ${fileName}:`, error instanceof Error ? error.message : String(error));
         }
       }
@@ -118,7 +118,7 @@ export const FileUpload = <T extends string | File = string>({
         }
         onFileSelect(result); 
       } catch (error: unknown) {
-        const fileName = (error instanceof Error && fileListArray[0]?.name) ? fileListArray[0].name : 'Unknown File'; // Safely access file.name
+        const fileName = (fileListArray[0] && fileListArray[0].name) ? fileListArray[0].name : 'Unknown File'; // Safely access file.name
         console.error(`Error processing single file ${fileName}:`, error instanceof Error ? error.message : String(error));
       }
     }

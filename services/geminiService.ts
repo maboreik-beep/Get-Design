@@ -60,7 +60,6 @@ export async function generateDesign(
     "Almost done, just a moment!",
   ];
   let messageIndex = 0;
-  // Fix: In a browser environment, setInterval returns a number.
   let statusInterval: number | null = null; 
 
   if (designType !== 'web') { // Only show progress for immediate generations
@@ -125,7 +124,6 @@ export async function triggerWebDesignGeneration(
     "Website design concept ready!",
   ];
   let messageIndex = 0;
-  // Fix: In a browser environment, setInterval returns a number.
   const statusInterval: number = setInterval(() => { 
     if (messageIndex < statusMessages.length) {
       onStatusUpdate(statusMessages[messageIndex]);

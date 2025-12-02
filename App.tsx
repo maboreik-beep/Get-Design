@@ -490,7 +490,8 @@ function App() {
       link.href = url;
       link.download = filename;
       document.body.appendChild(link);
-      link.removeChild(link);
+      link.click(); // Programmatically click the link to trigger download
+      document.body.removeChild(link);
       URL.revokeObjectURL(url);
     } else {
       // Fallback for non-branded download if blob creation fails

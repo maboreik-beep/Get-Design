@@ -760,7 +760,7 @@ app.post('/api/contact', async (req, res) => {
     res.status(201).json({ id: result.lastID, message: "Contact saved successfully." });
   } catch (err) {
     console.error("Database error saving contact:", err);
-    if (err.message.includes("UNIQUE constraint failed: Leads.email")) {
+    if (err.message.includes("UNIQUE constraint failed")) {
       // If email already exists, retrieve existing ID
       try {
         const existingLead = await db.get("SELECT id FROM Leads WHERE email = ?", email);
@@ -1444,4 +1444,126 @@ app.post('/api/generate-design', upload.single('zipFile'), async (req, res) => {
       specificPrompt = `DESIGN TYPE: Brand Identity Flat-Lay. Create a flat-lay visual showcasing brand identity elements (e.g., business card, letterhead, envelope, mockups).`;
     } else if (type === 'social') {
       specificPrompt = `DESIGN TYPE: Social Media Post. PLATFORM: "${businessData.socialPlatform || 'Instagram'}". Focus on creating a compelling visual for online sharing.`;
-    
+    } else if (type === 'brochure') {
+      specificPrompt = `DESIGN TYPE: Brochure/Catalog. ORIENTATION: "${businessData.brochureOrientation}". SIZE: "${businessData.brochureSize}". PAGES: ${businessData.brochurePageCount}.`;
+    }
+    // Note: 'web' type now goes through Design Tasks, so it won't hit this path directly for generation.
+
+    finalGeminiParts.push({
+      text: `
+      ${templateGuidancePrompt || ''}
+      
+      BRANDING INTEGRATION:
+      - Business Name: "${businessData.name}" (Render legibly as per design. DO NOT add "Get Design" text to the logo or main content).
+      - Description Context: "${businessData.description}".
+      
+      ${brochureTextContent.length > 0 ? `\nADDITIONAL CONTENT CONTEXT FROM DOCUMENTS (Extract key themes, entities, and style):\n${brochureTextContent.join('\n\n')}\n` : ''}
+
+      TEXTUAL CONTENT TO DISPLAY IN THE DESIGN:
+      - PRIMARY HEADLINE: "${generatedHeadline}"
+      - BODY TEXT (concise): "${generatedBody}"
+      - CALL TO ACTION (if applicable): "${generatedCta}"
+
+      ${industryInstruction}
+      ${specificPrompt}
+      
+      RENDER QUALITY SETTINGS (FOR VISUAL CLARITY & DIGITAL PRESENTATION):
+      1. **Presentation**: Clean, sharp, and easy to understand. Optimized for digital display.
+      2. **Details**: Crisp lines, clear text, precise graphics.
+      3. **Lighting**: Even, soft ambient lighting to ensure all design elements are visible and legible.
+      4. **Reflections**: Subtle, functional reflections only if they enhance UI clarity, not distract.
+      5. **Post-Processing**: Balanced contrast and color correction for a vibrant, modern digital aesthetic.
+      
+      STRICT CONSTRAINT: The design must look ABSOLUTELY FINISHED, production-ready, and already EXISTS as a physical or digital product. NO sketches, NO blurry text, NO placeholder indicators.
+      `
+    });
+
+    // 2. Add logo image if provided (after template image and main text)
+    if (logoBase64) {
+      const parsedLogo = parseDataUrl(logoBase64);
+      if (parsedLogo) {
+        finalGeminiParts.push({ inlineData: { mimeType: parsedLogo.mimeType, data: parsedLogo.data } });
+      }
+    }
+
+    // 3. Add brochure images if provided (after template image, main text, and logo)
+    brochureImageParts.forEach(part => finalGeminiParts.push(part));
+
+    let resultImages = [];
+    let mainImageUrl = "";
+
+    // For Brochure, generate multiple pages
+    if (type === 'brochure' && businessData.brochurePageCount && businessData.brochurePageCount > 1) {
+      const brochureGenerationPromises = [];
+      for (let i = 0; i < businessData.brochurePageCount; i++) {
+        const pageSpecificParts = [...finalGeminiParts, { text: `PAGE FOCUS: Page ${i + 1} of ${businessData.brochurePageCount}. Ensure content flow and design consistency.` }];
+        brochureGenerationPromises.push(ai.models.generateContent({
+          model: 'gemini-2.5-flash-image', 
+          contents: { parts: pageSpecificParts },
+          config: {
+            imageConfig: {
+              aspectRatio: businessData.brochureOrientation === 'landscape' ? "16:9" : "3:4",
+            }
+          }
+        }));
+      }
+      const brochureResponses = await Promise.all(brochureGenerationPromises);
+      for (const response of brochureResponses) {
+        const candidate = response.candidates?.[0];
+        if (candidate?.content?.parts) {
+          for (const part of candidate.content.parts) {
+            if (part.inlineData) {
+              resultImages.push(`data:image/png;base64,${part.inlineData.data}`);
+            }
+          }
+        }
+      }
+      mainImageUrl = resultImages[0] || '';
+
+    } else {
+      // Single image generation for logo, identity, social, or single-page brochure
+      const response = await ai.models.generateContent({
+        model: 'gemini-2.5-flash-image', // Use the flash image model
+        contents: {
+          parts: finalGeminiParts
+        },
+        config: {
+          imageConfig: {
+            aspectRatio: aspectRatio, // Dynamic aspect ratio
+          }
+        }
+      });
+
+      const candidate = response.candidates?.[0];
+      if (candidate?.content?.parts) {
+        for (const part of candidate.content.parts) {
+          if (part.inlineData) {
+            mainImageUrl = `data:image/png;base64,${part.inlineData.data}`;
+            resultImages = [mainImageUrl];
+            break;
+          }
+        }
+      }
+    }
+
+    if (!mainImageUrl) throw new Error("The AI model did not return any images. Please try again or refine your prompt.");
+
+    // Save design to database
+    const designResult = await db.run(
+      "INSERT INTO GeneratedDesigns (contact_id, design_type, business_name, industry, description, image_url, template_link, conceptual_template_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+      businessData.contactId,
+      type,
+      businessData.name,
+      businessData.industry,
+      businessData.description,
+      mainImageUrl, // Use the first generated image as main
+      selectedTemplate ? (selectedTemplate.thumbnail_url || '') : '',
+      selectedTemplate ? selectedTemplate.id : null
+    );
+
+    res.json({
+      id: designResult.lastID.toString(),
+      templateId: selectedTemplate ? selectedTemplate.id : `GD-${designResult.lastID.toString().slice(-6)}`,
+      templateUrl: "", // Not used currently for this flow
+      templateTitle: `Concept GD-${designResult.lastID.toString().slice(-6)}`,
+      searchQuery: `${type} design for ${business

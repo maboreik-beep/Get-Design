@@ -53,7 +53,7 @@ export interface BusinessData {
   brochureBase64?: string | string[] | null; // Updated to support array of base64 strings
 }
 
-export type GeneratedDesignStatus = 'pending' | 'generating' | 'completed' | 'failed'; // For web designs
+export type GeneratedDesignStatus = 'pending' | 'generating' | 'completed' | 'failed' | 'cancelled'; // For web designs
 
 export interface GeneratedResult {
   id: string; // Client-side generated ID (or DB ID)
@@ -127,6 +127,7 @@ export interface GeneratedDesignRecord {
   contact_phone?: string;
 }
 
+// Exported type for consistency
 export type DesignTaskStatus = 'pending' | 'generating' | 'completed' | 'failed' | 'cancelled';
 
 export interface DesignTask {
