@@ -73,6 +73,22 @@ async function initializeDatabase() {
       thumbnail_url TEXT, -- Direct URL from Google Drive
       generated_content_examples TEXT -- Stored as JSON string: { headline, body, cta }
     );
+
+    CREATE TABLE IF NOT EXISTS DesignTasks (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      contact_id INTEGER NOT NULL,
+      design_type TEXT NOT NULL, -- Will primarily be 'web'
+      business_data TEXT NOT NULL, -- JSON string of BusinessData
+      logo_base64 TEXT, -- Stored if provided (string)
+      brochure_base64 TEXT, -- Stored if provided (JSON string of string[])
+      zip_file_path TEXT, -- Optional: path to the extracted contents if zip was uploaded
+      status TEXT NOT NULL DEFAULT 'pending', -- 'pending', 'generating', 'completed', 'failed', 'cancelled'
+      generated_design_id INTEGER, -- Link to GeneratedDesigns if completed
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (contact_id) REFERENCES Leads(id),
+      FOREIGN KEY (generated_design_id) REFERENCES GeneratedDesigns(id)
+    );
   `);
   console.log('Database initialized.');
 
@@ -407,6 +423,324 @@ async function selectTemplate(designType, industry, visualStyle) {
   return null;
 }
 
+// Helper function to handle AI generation for web designs (used by admin route)
+async function performWebDesignGeneration(designTask, contactDetails) {
+  if (!ai) {
+    throw new Error("Server API Key not configured.");
+  }
+
+  const { id: taskId, contact_id, business_data: businessDataJson, logo_base64: logoBase64String, brochure_base64: brochureBase64Json, zip_file_path: zipFilePath } = designTask;
+  
+  let businessData = JSON.parse(businessDataJson);
+  let logoBase64 = logoBase64String;
+  let brochureBase64 = brochureBase64Json ? JSON.parse(brochureBase64Json) : [];
+  let brochureTextContent = [];
+  let brochureImageParts = [];
+  let templateLink = "";
+
+  // If a zip was used, re-extract content if zipFilePath is available
+  if (zipFilePath && fs.existsSync(zipFilePath)) {
+    try {
+      const files = await promisify(fs.readdir)(zipFilePath);
+      let descriptionFromZip = '';
+      let logoFromZip = '';
+      let brochureFromZip = [];
+
+      for (const file of files) {
+        const filePath = path.join(zipFilePath, file);
+        const ext = path.extname(file).toLowerCase();
+        const fileName = path.basename(file).toLowerCase();
+
+        if (['.png', '.jpg', '.jpeg', '.webp'].includes(ext)) {
+          const fileBase64 = fs.readFileSync(filePath, { encoding: 'base64' });
+          if (fileName.includes('logo') && !logoFromZip) {
+            logoFromZip = `data:image/${ext.substring(1)};base64,${fileBase64}`;
+          } else if (fileName.includes('brochure') && !brochureFromZip.length) {
+            brochureFromZip.push(`data:image/${ext.substring(1)};base64,${fileBase64}`);
+          }
+        } else if (['.txt', '.md'].includes(ext)) {
+          const fileContent = fs.readFileSync(filePath, 'utf8');
+          if (fileName.includes('description') || fileName.includes('brief')) {
+            descriptionFromZip += fileContent + '\n';
+          }
+        } else if (['.pdf'].includes(ext)) {
+          const fileBase64 = fs.readFileSync(filePath, { encoding: 'base64' });
+          if (fileName.includes('brochure')) {
+            brochureFromZip.push(`data:application/pdf;base64,${fileBase64}`);
+          }
+        } else if (['.docx'].includes(ext)) {
+          const fileBase64 = fs.readFileSync(filePath, { encoding: 'base64' });
+          if (fileName.includes('brochure')) {
+            brochureFromZip.push(`data:application/vnd.openxmlformats-officedocument.wordprocessingml.document;base64,${fileBase64}`);
+          }
+        }
+      }
+      logoBase64 = logoFromZip || logoBase64;
+      brochureBase64 = brochureFromZip.length > 0 ? brochureFromZip : brochureBase64;
+      businessData.description = descriptionFromZip || businessData.description;
+      if (descriptionFromZip && !businessData.name) {
+        businessData.name = `Task ${taskId} Project`;
+      }
+    } catch (zipError) {
+      console.error(`Error re-processing zip for task ${taskId}:`, zipError);
+    }
+  }
+
+
+  // Process brochureBase64 (can be string or string[])
+  const brochureFiles = Array.isArray(brochureBase64) ? brochureBase64 : (brochureBase64 ? [brochureBase64] : []);
+
+  for (const dataUrl of brochureFiles) {
+    const parsed = parseDataUrl(dataUrl);
+    if (parsed) {
+      const { mimeType, data } = parsed;
+      if (mimeType.startsWith('image/')) {
+        brochureImageParts.push({ inlineData: { mimeType, data } });
+      } else if (mimeType === 'application/pdf') {
+        try {
+          const buffer = Buffer.from(data, 'base64');
+          const pdfData = await pdfParse(buffer);
+          brochureTextContent.push(pdfData.text);
+        } catch (pdfError) {
+          console.error("Error parsing PDF for task:", pdfError);
+        }
+      } else if (mimeType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
+        try {
+          const buffer = Buffer.from(data, 'base64');
+          const result = await mammoth.extractRawText({ buffer: buffer });
+          brochureTextContent.push(result.value);
+        } catch (docxError) {
+          console.error("Error parsing DOCX for task:", docxError);
+        }
+      } else {
+        console.warn("Unsupported brochure file type for task:", mimeType);
+      }
+    }
+  }
+
+  // --- Template Selection & Dynamic Content Generation ---
+  const selectedTemplate = await selectTemplate(designTask.design_type, businessData.industry, businessData.visualStyle);
+  let templateGuidancePrompt = '';
+  let generatedHeadline = businessData.name; // Default to business name
+  let generatedBody = businessData.description; // Default to description
+  let generatedCta = 'Learn More'; // Default CTA
+
+  // Aspect ratio for image generation (default for single images)
+  const aspectRatio = "16:9"; // Fixed for web designs
+
+  if (businessData.postContent) {
+    generatedHeadline = businessData.postContent.split('\n')[0] || generatedHeadline;
+    generatedBody = businessData.postContent.split('\n').slice(1).join(' ') || generatedBody;
+  } else if (selectedTemplate) {
+    if (selectedTemplate.thumbnail_url && selectedTemplate.thumbnail_url.trim() !== '') {
+      templateGuidancePrompt = `
+        VISUAL TEMPLATE REFERENCE: An image part is provided. This image represents a template.
+        Your task is to:
+        1. Analyze its layout, composition, color scheme, typography, and overall aesthetic.
+        2. Create a *new design* for the current business that *adopts and adapts* the core visual style of the provided template.
+        3. DO NOT generate an identical copy. Evolve the style to fit the new context.
+        4. Ensure the new design reflects the business name, industry, and project details provided.
+        5. Replace any generic stock imagery from the template with relevant imagery for the new business.
+        6. Use the provided textual content (headline, body, CTA) within the design, fitting it into the adapted template structure.
+        
+        The following text provides further nuance about the template's original concept: "${selectedTemplate.prompt_hint}"
+      `;
+    } else {
+      templateGuidancePrompt = `
+        DESIGN CONCEPT: Base the overall layout, composition, and visual elements on the following template description. Adapt its core aesthetics and structure to fit the new business. Replace generic elements with relevant content.
+        TEMPLATE DESCRIPTION: "${selectedTemplate.prompt_hint}"
+      `;
+    }
+    
+    const templateGeneratedContent = JSON.parse(selectedTemplate.generated_content_examples || '{}');
+
+    const contentGenerationPrompt = `
+      Based on the following business details and industry, and considering a template with these example content elements:
+      Business Name: "${businessData.name}"
+      Industry: "${businessData.industry}"
+      Description: "${businessData.description}"
+      
+      Generate a concise, impactful marketing headline, a short body text (1-2 sentences), and a clear call-to-action (CTA).
+      Use the template's example content as inspiration for tone and style, but tailor it to the current business and industry.
+      Example Headline: "${templateGeneratedContent.headline || 'Inspiring Headline'}"
+      Example Body: "${templateGeneratedContent.body || 'Compelling Body Text'}"
+      Example CTA: "${templateGeneratedContent.cta || 'Learn More'}"
+
+      Output ONLY in JSON format with keys "headline", "body", "cta".
+      Example: {"headline": "Your Title", "body": "Your description.", "cta": "Click Here"}
+    `;
+
+    try {
+      const contentAI = new GoogleGenAI({ apiKey: GEMINI_API_KEY });
+      const contentResponse = await contentAI.models.generateContent({
+        model: 'gemini-2.5-flash', // Use a text-only model for content generation
+        contents: [{ text: contentGenerationPrompt }],
+        config: {
+          responseMimeType: "application/json",
+          responseSchema: {
+            type: Type.OBJECT,
+            properties: {
+              headline: { type: Type.STRING },
+              body: { type: Type.STRING },
+              cta: { type: Type.STRING },
+            },
+            propertyOrdering: ["headline", "body", "cta"],
+          },
+        },
+      });
+      const contentJson = JSON.parse(contentResponse.text);
+      generatedHeadline = contentJson.headline || generatedHeadline;
+      generatedBody = contentJson.body || contentJson.text || generatedBody;
+      generatedCta = contentJson.cta || generatedCta;
+      console.log("Generated Content (AI):", generatedHeadline, generatedBody, generatedCta);
+
+    } catch (contentError) {
+      console.warn("Failed to generate content via AI for task:", contentError);
+      generatedHeadline = templateGeneratedContent.headline || generatedHeadline;
+      generatedBody = templateGeneratedContent.body || generatedBody;
+      generatedCta = templateGeneratedContent.cta || generatedCta;
+    }
+  }
+
+
+  // --- Gemini Prompt Construction ---
+  const finalGeminiParts = [];
+
+  // Add selected template's thumbnail image as visual reference IF AVAILABLE
+  if (selectedTemplate && selectedTemplate.thumbnail_url && selectedTemplate.thumbnail_url.trim() !== '') {
+    try {
+      const imageResponse = await fetch(selectedTemplate.thumbnail_url);
+      if (!imageResponse.ok) {
+        throw new Error(`Failed to fetch template thumbnail from ${selectedTemplate.thumbnail_url}: ${imageResponse.statusText}`);
+      }
+      const imageBuffer = await imageResponse.arrayBuffer();
+      const base64Image = Buffer.from(imageBuffer).toString('base64');
+      const contentType = imageResponse.headers.get('content-type') || 'image/jpeg';
+      finalGeminiParts.push({ inlineData: { mimeType: contentType, data: base64Image } });
+    } catch (imgFetchError) {
+      console.warn(`Could not fetch or process template thumbnail from URL for task ${taskId}: ${selectedTemplate.thumbnail_url}`, imgFetchError);
+    }
+  }
+
+  let industryInstruction = `
+    INDUSTRY CONTEXT: "${businessData.industry || 'General Business'}".
+    VISUAL STYLE PREFERENCE: "${businessData.visualStyle || 'Adapt to the template\'s dominant style'}"
+    COLOR PALETTE GUIDANCE: "${businessData.customColorPalette || 'Derive main colors from logo (if provided) or industry norms, ensuring a harmonious and professional look.'}"
+    DESIGN PRINCIPLES: Ensure the design is modern, professional, visually appealing, and directly relevant to the business and chosen style.
+  `;
+
+  let specificPrompt = `DESIGN TYPE: Website Design. Layout for a modern, responsive website.`;
+
+  finalGeminiParts.push({
+    text: `
+    ${templateGuidancePrompt || ''}
+    
+    BRANDING INTEGRATION:
+    - Business Name: "${businessData.name}" (Render legibly as per design. DO NOT add "Get Design" text to the logo or main content).
+    - Description Context: "${businessData.description}".
+    
+    ${brochureTextContent.length > 0 ? `\nADDITIONAL CONTENT CONTEXT FROM DOCUMENTS (Extract key themes, entities, and style):\n${brochureTextContent.join('\n\n')}\n` : ''}
+
+    TEXTUAL CONTENT TO DISPLAY IN THE DESIGN:
+    - PRIMARY HEADLINE: "${generatedHeadline}"
+    - BODY TEXT (concise): "${generatedBody}"
+    - CALL TO ACTION (if applicable): "${generatedCta}"
+
+    ${industryInstruction}
+    ${specificPrompt}
+    
+    RENDER QUALITY SETTINGS (FOR VISUAL CLARITY & DIGITAL PRESENTATION):
+    1. **Presentation**: Clean, sharp, and easy to understand. Optimized for digital display.
+    2. **Details**: Crisp lines, clear text, precise graphics.
+    3. **Lighting**: Even, soft ambient lighting to ensure all design elements are visible and legible.
+    4. **Reflections**: Subtle, functional reflections only if they enhance UI clarity, not distract.
+    5. **Post-Processing**: Balanced contrast and color correction for a vibrant, modern digital aesthetic.
+    
+    STRICT CONSTRAINT: The design must look ABSOLUTELY FINISHED, production-ready, and already EXISTS as a physical or digital product. NO sketches, NO blurry text, NO placeholder indicators.
+    `
+  });
+
+  // 2. Add logo image if provided (after template image and main text)
+  if (logoBase64) {
+    const parsedLogo = parseDataUrl(logoBase64);
+    if (parsedLogo) {
+      finalGeminiParts.push({ inlineData: { mimeType: parsedLogo.mimeType, data: parsedLogo.data } });
+    }
+  }
+
+  // 3. Add brochure images if provided (after template image, main text, and logo)
+  brochureImageParts.forEach(part => finalGeminiParts.push(part));
+
+  let resultImages = [];
+  let mainImageUrl = "";
+
+  let pagesToGen = businessData.selectedPages || [];
+  if (!pagesToGen.includes("Home")) {
+      pagesToGen.unshift("Home"); 
+  }
+  pagesToGen = pagesToGen.slice(0, 3); // Limit to max 3 pages
+
+  const generationPromises = pagesToGen.map(async (page) => {
+    const pageSpecificParts = [...finalGeminiParts, {text: `PAGE FOCUS: ${page}. Ensure the UI specific to a ${page} is clearly visible and structured in block sections, suitable for Elementor.`}];
+    
+    const response = await ai.models.generateContent({
+      model: 'gemini-2.5-flash-image', 
+      contents: {
+        parts: pageSpecificParts
+      },
+      config: {
+        imageConfig: {
+          aspectRatio: "16:9",
+        }
+      }
+    });
+
+    const candidate = response.candidates?.[0];
+    if (candidate?.content?.parts) {
+      for (const part of candidate.content.parts) {
+        if (part.inlineData) {
+          return `data:image/png;base64,${part.inlineData.data}`;
+        }
+      }
+    }
+    return null; // Return null if no image generated for this page
+  });
+
+  const generatedPageImages = await Promise.all(generationPromises);
+  resultImages = generatedPageImages.filter(img => img !== null); // Filter out nulls
+  mainImageUrl = resultImages[0] || '';
+
+  if (!mainImageUrl) throw new Error("The AI model did not return any images for the website design. Please try again or refine your prompt.");
+
+  // Save design to database
+  const designResult = await db.run(
+    "INSERT INTO GeneratedDesigns (contact_id, design_type, business_name, industry, description, image_url, template_link, conceptual_template_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+    contact_id, // From DesignTask
+    designTask.design_type,
+    businessData.name,
+    businessData.industry,
+    businessData.description,
+    mainImageUrl,
+    templateLink,
+    selectedTemplate ? selectedTemplate.id : null
+  );
+
+  return {
+    id: designResult.lastID.toString(),
+    templateId: selectedTemplate ? selectedTemplate.id : `GD-${designResult.lastID.toString().slice(-6)}`,
+    templateUrl: "",
+    templateTitle: `Concept GD-${designResult.lastID.toString().slice(-6)}`,
+    searchQuery: `${designTask.design_type} design for ${businessData.name}`,
+    imageUrl: mainImageUrl,
+    images: resultImages,
+    timestamp: Date.now(),
+    type: designTask.design_type,
+    data: businessData,
+    templateLink: templateLink,
+    contactId: contact_id,
+  };
+}
+
 
 // --- API Endpoints ---
 
@@ -441,506 +775,6 @@ app.post('/api/contact', async (req, res) => {
   }
 });
 
-// API Endpoint for design generation
-app.post('/api/generate-design', upload.single('zipFile'), async (req, res) => {
-  if (!ai) {
-    return res.status(500).json({ error: "Server API Key not configured. Please contact support." });
-  }
-
-  let { type, businessData, logoBase64 } = req.body;
-  
-  // businessData comes as string from FormData, parse it
-  if (typeof businessData === 'string') {
-    businessData = JSON.parse(businessData);
-  }
-
-  // Extract brochureBase64 from parsed businessData if present
-  let brochureBase64 = businessData.brochureBase64;
-  if (typeof brochureBase64 === 'string') brochureBase64 = [brochureBase64];
-  if (!brochureBase64) brochureBase64 = [];
-
-
-  let descriptionFromZip = ''; // To store description extracted from zip
-  let logoFromZip = ''; // To store logo extracted from zip
-  let brochureFromZip = ''; // To store brochure extracted from zip
-
-  const tempDir = path.join(os.tmpdir(), `upload-${Date.now()}`); // Temp dir for zip extraction
-
-  try {
-    if (req.file) { // If a zip file was uploaded
-      console.log('Zip file received:', req.file.originalname);
-      await promisify(fs.mkdir)(tempDir, { recursive: true }); // Create temp dir
-
-      const zip = new AdmZip(req.file.path);
-      zip.extractAllTo(tempDir, true);
-      console.log('Zip extracted to:', tempDir);
-
-      const files = await promisify(fs.readdir)(tempDir);
-      for (const file of files) {
-        const filePath = path.join(tempDir, file);
-        const ext = path.extname(file).toLowerCase();
-        const fileName = path.basename(file).toLowerCase();
-
-        if (['.png', '.jpg', '.jpeg', '.webp'].includes(ext)) {
-          const fileBase64 = fs.readFileSync(filePath, { encoding: 'base64' });
-          if (fileName.includes('logo') && !logoFromZip) {
-            logoFromZip = `data:image/${ext.substring(1)};base64,${fileBase64}`;
-          } else if (fileName.includes('brochure') && !brochureFromZip) {
-            brochureFromZip = `data:image/${ext.substring(1)};base64,${fileBase64}`;
-          }
-          // If no specific name, just take the first image found as a generic asset
-          if (!logoFromZip && !brochureFromZip) {
-            logoFromZip = `data:image/${ext.substring(1)};base64,${fileBase64}`; // Fallback: use first image as logo
-          }
-        } else if (['.txt', '.md'].includes(ext)) {
-          const fileContent = fs.readFileSync(filePath, 'utf8');
-          if (fileName.includes('description') || fileName.includes('brief')) {
-            descriptionFromZip += fileContent + '\n';
-          }
-        } else if (['.pdf'].includes(ext)) {
-          const fileBase64 = fs.readFileSync(filePath, { encoding: 'base64' });
-          if (fileName.includes('brochure')) {
-            brochureFromZip = `data:application/pdf;base64,${fileBase64}`;
-          }
-        } else if (['.docx'].includes(ext)) {
-          const fileBase64 = fs.readFileSync(filePath, { encoding: 'base64' });
-          // Note: Mammoth requires a buffer, not base64 string directly for initial processing.
-          // For consistency with data URLs, we'll store as base64 and parse on use.
-          if (fileName.includes('brochure')) {
-            brochureFromZip = `data:application/vnd.openxmlformats-officedocument.wordprocessingml.document;base64,${fileBase64}`;
-          }
-        }
-      }
-      // Prioritize zip-extracted content over form-based uploads for images
-      logoBase64 = logoFromZip || logoBase64;
-      brochureBase64 = brochureFromZip ? [brochureFromZip] : (brochureBase64 || []); // Treat as array from zip
-
-      // Augment or replace description
-      businessData.description = descriptionFromZip || businessData.description;
-      if (descriptionFromZip && !businessData.name) {
-        businessData.name = req.file.originalname.replace('.zip', '') || 'Zip Project';
-      }
-
-    } else {
-      console.log('No zip file uploaded, using form data.');
-    }
-
-    // --- Process brochureBase64 (can be string or string[]) ---
-    const brochureTextContent = [];
-    const brochureImageParts = [];
-
-    const brochureFiles = Array.isArray(brochureBase64) ? brochureBase64 : (brochureBase64 ? [brochureBase64] : []);
-
-    for (const dataUrl of brochureFiles) {
-      const parsed = parseDataUrl(dataUrl);
-      if (parsed) {
-        const { mimeType, data } = parsed;
-        if (mimeType.startsWith('image/')) {
-          brochureImageParts.push({ inlineData: { mimeType, data } });
-        } else if (mimeType === 'application/pdf') {
-          try {
-            const buffer = Buffer.from(data, 'base64');
-            const pdfData = await pdfParse(buffer);
-            brochureTextContent.push(pdfData.text);
-          } catch (pdfError) {
-            console.error("Error parsing PDF:", pdfError);
-          }
-        } else if (mimeType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
-          try {
-            const buffer = Buffer.from(data, 'base64');
-            const result = await mammoth.extractRawText({ buffer: buffer });
-            brochureTextContent.push(result.value);
-          } catch (docxError) {
-            console.error("Error parsing DOCX:", docxError);
-          }
-        } else {
-          console.warn("Unsupported brochure file type:", mimeType);
-        }
-      }
-    }
-
-    // --- Template Selection & Dynamic Content Generation ---
-    const selectedTemplate = await selectTemplate(type, businessData.industry, businessData.visualStyle);
-    let templateGuidancePrompt = '';
-    let generatedHeadline = businessData.name; // Default to business name
-    let generatedBody = businessData.description; // Default to description
-    let generatedCta = 'Learn More'; // Default CTA
-
-    // Aspect ratio for image generation (default for single images)
-    let aspectRatio = "1:1"; // Default to square
-    if (type === 'logo') aspectRatio = "1:1";
-    if (type === 'social') {
-      if (businessData.socialPlatform === 'instagram') aspectRatio = "1:1";
-      if (businessData.socialPlatform === 'facebook') aspectRatio = "16:9";
-      if (businessData.socialPlatform === 'linkedin') aspectRatio = "4:1"; // LinkedIn banner typically wide
-    }
-    if (type === 'identity') aspectRatio = "4:3"; // Good for a flat-lay overview
-
-
-    if (businessData.postContent) {
-      generatedHeadline = businessData.postContent.split('\n')[0] || generatedHeadline;
-      generatedBody = businessData.postContent.split('\n').slice(1).join(' ') || generatedBody;
-      // CTA remains default or can be derived if a specific pattern is expected in postContent
-    } else if (selectedTemplate) {
-      // Dynamic template guidance based on whether a thumbnailUrl is available
-      if (selectedTemplate.thumbnail_url && selectedTemplate.thumbnail_url.trim() !== '') {
-        templateGuidancePrompt = `
-          VISUAL TEMPLATE REFERENCE: An image part is provided. This image represents a template.
-          Your task is to:
-          1. Analyze its layout, composition, color scheme, typography, and overall aesthetic.
-          2. Create a *new design* for the current business that *adopts and adapts* the core visual style of the provided template.
-          3. DO NOT generate an identical copy. Evolve the style to fit the new context.
-          4. Ensure the new design reflects the business name, industry, and project details provided.
-          5. Replace any generic stock imagery from the template with relevant imagery for the new business.
-          6. Use the provided textual content (headline, body, CTA) within the design, fitting it into the adapted template structure.
-          
-          The following text provides further nuance about the template's original concept: "${selectedTemplate.prompt_hint}"
-        `;
-      } else {
-        templateGuidancePrompt = `
-          DESIGN CONCEPT: Base the overall layout, composition, and visual elements on the following template description. Adapt its core aesthetics and structure to fit the new business. Replace generic elements with relevant content.
-          TEMPLATE DESCRIPTION: "${selectedTemplate.prompt_hint}"
-        `;
-      }
-      
-      // If no postContent, generate content for the design
-      const templateGeneratedContent = JSON.parse(selectedTemplate.generated_content_examples || '{}');
-
-      const contentGenerationPrompt = `
-        Based on the following business details and industry, and considering a template with these example content elements:
-        Business Name: "${businessData.name}"
-        Industry: "${businessData.industry}"
-        Description: "${businessData.description}"
-        
-        Generate a concise, impactful marketing headline, a short body text (1-2 sentences), and a clear call-to-action (CTA).
-        Use the template's example content as inspiration for tone and style, but tailor it to the current business and industry.
-        Example Headline: "${templateGeneratedContent.headline || 'Inspiring Headline'}"
-        Example Body: "${templateGeneratedContent.body || 'Compelling Body Text'}"
-        Example CTA: "${templateGeneratedContent.cta || 'Learn More'}"
-
-        Output ONLY in JSON format with keys "headline", "body", "cta".
-        Example: {"headline": "Your Title", "body": "Your description.", "cta": "Click Here"}
-      `;
-
-      try {
-        const contentAI = new GoogleGenAI({ apiKey: GEMINI_API_KEY });
-        const contentResponse = await contentAI.models.generateContent({
-          model: 'gemini-2.5-flash', // Use a text-only model for content generation
-          contents: [{ text: contentGenerationPrompt }],
-          config: {
-            responseMimeType: "application/json",
-            responseSchema: {
-              type: Type.OBJECT,
-              properties: {
-                headline: { type: Type.STRING },
-                body: { type: Type.STRING },
-                cta: { type: Type.STRING },
-              },
-              propertyOrdering: ["headline", "body", "cta"],
-            },
-          },
-        });
-        const contentJson = JSON.parse(contentResponse.text);
-        generatedHeadline = contentJson.headline || generatedHeadline;
-        generatedBody = contentJson.body || contentJson.text || generatedBody; // Fallback to contentJson.text if body is empty (sometimes model just gives raw text)
-        generatedCta = contentJson.cta || generatedCta;
-        console.log("Generated Content (AI):", generatedHeadline, generatedBody, generatedCta);
-
-      } catch (contentError) {
-        console.warn("Failed to generate content via AI:", contentError);
-        // Fallback to template examples or generic if AI content generation fails
-        generatedHeadline = templateGeneratedContent.headline || generatedHeadline;
-        generatedBody = templateGeneratedContent.body || generatedBody;
-        generatedCta = templateGeneratedContent.cta || generatedCta;
-      }
-    }
-
-
-    // --- Gemini Prompt Construction ---
-    const finalGeminiParts = [];
-
-    // Add selected template's thumbnail image as visual reference IF AVAILABLE
-    if (selectedTemplate && selectedTemplate.thumbnail_url && selectedTemplate.thumbnail_url.trim() !== '') {
-      try {
-        const imageResponse = await fetch(selectedTemplate.thumbnail_url);
-        if (!imageResponse.ok) {
-          throw new Error(`Failed to fetch template thumbnail from ${selectedTemplate.thumbnail_url}: ${imageResponse.statusText}`);
-        }
-        const imageBuffer = await imageResponse.arrayBuffer();
-        const base64Image = Buffer.from(imageBuffer).toString('base64');
-        const contentType = imageResponse.headers.get('content-type') || 'image/jpeg'; // Default to jpeg if unknown
-        finalGeminiParts.push({ inlineData: { mimeType: contentType, data: base64Image } });
-      } catch (imgFetchError) {
-        console.warn(`Could not fetch or process template thumbnail from URL: ${selectedTemplate.thumbnail_url}`, imgFetchError);
-        // Continue without the thumbnail if it fails, relying on text promptHint
-      }
-    }
-
-
-    // 1. Core textual instructions (template guidance, branding, description, content)
-    let industryInstruction = `
-      INDUSTRY CONTEXT: "${businessData.industry || 'General Business'}".
-      VISUAL STYLE PREFERENCE: "${businessData.visualStyle || 'Adapt to the template\'s dominant style'}"
-      COLOR PALETTE GUIDANCE: "${businessData.customColorPalette || 'Derive main colors from logo (if provided) or industry norms, ensuring a harmonious and professional look.'}"
-      DESIGN PRINCIPLES: Ensure the design is modern, professional, visually appealing, and directly relevant to the business and chosen style.
-    `;
-
-    let specificPrompt = '';
-    if (type === 'logo') {
-      specificPrompt = `DESIGN TYPE: Logo. Create a standalone logo. LOGO STYLE: "${businessData.logoStyle || '3d'}".`;
-    } else if (type === 'identity') {
-      specificPrompt = `DESIGN TYPE: Brand Identity Flat-Lay. Create a flat-lay visual showcasing brand identity elements (e.g., business card, letterhead, envelope, mockups).`;
-    } else if (type === 'social') {
-      specificPrompt = `DESIGN TYPE: Social Media Post. PLATFORM: "${businessData.socialPlatform || 'Instagram'}". Focus on creating a compelling visual for online sharing.`;
-    } else if (type === 'brochure') {
-      specificPrompt = `DESIGN TYPE: Brochure / Catalog. FORMAT: ${businessData.brochureSize || 'A4'}, ORIENTATION: ${businessData.brochureOrientation || 'Portrait'}. Show realistic mockups.`;
-    } else if (type === 'web') {
-      specificPrompt = `DESIGN TYPE: Website Design. Layout for a modern, responsive website.`;
-    }
-
-    finalGeminiParts.push({
-      text: `
-      ${templateGuidancePrompt || ''}
-      
-      BRANDING INTEGRATION:
-      - Business Name: "${businessData.name}" (Render legibly as per design. DO NOT add "Get Design" text to the logo or main content).
-      - Description Context: "${businessData.description}".
-      
-      ${brochureTextContent.length > 0 ? `\nADDITIONAL CONTENT CONTEXT FROM DOCUMENTS (Extract key themes, entities, and style):\n${brochureTextContent.join('\n\n')}\n` : ''}
-
-      TEXTUAL CONTENT TO DISPLAY IN THE DESIGN:
-      - PRIMARY HEADLINE: "${generatedHeadline}"
-      - BODY TEXT (concise): "${generatedBody}"
-      - CALL TO ACTION (if applicable): "${generatedCta}"
-
-      ${industryInstruction}
-      ${specificPrompt}
-      
-      RENDER QUALITY SETTINGS (FOR VISUAL CLARITY & DIGITAL PRESENTATION):
-      1. **Presentation**: Clean, sharp, and easy to understand. Optimized for digital display.
-      2. **Details**: Crisp lines, clear text, precise graphics.
-      3. **Lighting**: Even, soft ambient lighting to ensure all design elements are visible and legible.
-      4. **Reflections**: Subtle, functional reflections only if they enhance UI clarity, not distract.
-      5. **Post-Processing**: Balanced contrast and color correction for a vibrant, modern digital aesthetic.
-      
-      STRICT CONSTRAINT: The design must look ABSOLUTELY FINISHED, production-ready, and already EXISTS as a physical or digital product. NO sketches, NO blurry text, NO placeholder indicators.
-      `
-    });
-
-    // 2. Add logo image if provided (after template image and main text)
-    if (logoBase64) {
-      const parsedLogo = parseDataUrl(logoBase64);
-      if (parsedLogo) {
-        finalGeminiParts.push({ inlineData: { mimeType: parsedLogo.mimeType, data: parsedLogo.data } });
-      }
-    }
-
-    // 3. Add brochure images if provided (after template image, main text, and logo)
-    brochureImageParts.forEach(part => finalGeminiParts.push(part));
-
-    let resultImages = [];
-    let mainImageUrl = "";
-    let templateLink = "";
-
-    // Generate based on type
-    if (type === 'web') {
-      let pagesToGen = businessData.selectedPages || [];
-      if (!pagesToGen.includes("Home")) {
-          pagesToGen.unshift("Home"); 
-      }
-      pagesToGen = pagesToGen.slice(0, 3); 
-
-      for (let i = 0; i < pagesToGen.length; i++) {
-        const page = pagesToGen[i];
-        // Create a new set of parts for each page generation
-        const pageSpecificParts = [...finalGeminiParts, {text: `PAGE FOCUS: ${page}. Ensure the UI specific to a ${page} is clearly visible and structured in block sections, suitable for Elementor.`}];
-
-        const response = await ai.models.generateContent({
-          model: 'gemini-2.5-flash-image', 
-          contents: {
-            parts: pageSpecificParts
-          },
-          config: {
-            imageConfig: {
-              aspectRatio: "16:9",
-            }
-          }
-        });
-
-        const candidate = response.candidates?.[0];
-        if (candidate?.content?.parts) {
-          for (const part of candidate.content.parts) {
-            if (part.inlineData) {
-              resultImages.push(`data:image/png;base64,${part.inlineData.data}`);
-              break;
-            }
-          }
-        }
-      }
-      mainImageUrl = resultImages[0];
-
-    } else if (type === 'brochure') {
-      const pageCount = businessData.brochurePageCount || 4;
-      
-      let orientationRatio = "3:4";
-      if (businessData.brochureSize === 'square') {
-          orientationRatio = "1:1";
-      } else {
-          orientationRatio = businessData.brochureOrientation === 'landscape' ? "4:3" : "3:4";
-      }
-      
-      const distinctGens = Math.min(pageCount, 4); 
-
-      for (let i = 1; i <= distinctGens; i++) {
-          let pageType = "Inner Content Spread";
-          if (i === 1) pageType = "Front Cover (Minimalist)";
-          else if (i === distinctGens) pageType = "Back Cover (Clean)";
-          else if (i === 2 && pageCount > 2) pageType = "Main Service / Product Page";
-          else if (i === 3 && pageCount > 3) pageType = "About Us / Contact Page";
-          
-          // Create a new set of parts for each page generation
-          const pageSpecificParts = [...finalGeminiParts, {text: `PAGE FOCUS: ${pageType}.`}];
-          
-          const response = await ai.models.generateContent({
-            model: 'gemini-2.5-flash-image', 
-            contents: {
-              parts: pageSpecificParts
-            },
-            config: {
-              imageConfig: {
-                aspectRatio: orientationRatio,
-              }
-            }
-          });
-
-          const candidate = response.candidates?.[0];
-          if (candidate?.content?.parts) {
-            for (const part of candidate.content.parts) {
-              if (part.inlineData) {
-                resultImages.push(`data:image/png;base64,${part.inlineData.data}`);
-                break;
-              }
-            }
-          }
-      }
-
-      while (resultImages.length < pageCount) {
-          // Fill remaining pages with a random selection from generated images
-          resultImages.push(resultImages[Math.floor(Math.random() * resultImages.length)]); 
-      }
-      mainImageUrl = resultImages[0];
-
-    } else {
-      // For logo, identity, social - single generation
-      const fullResponse = await ai.models.generateContent({
-        model: 'gemini-2.5-flash-image', 
-        contents: {
-          parts: finalGeminiParts // Use the combined parts here
-        },
-        config: {
-          imageConfig: {
-            aspectRatio: aspectRatio,
-          }
-        }
-      });
-
-      const responseText = fullResponse.text || '';
-      const templateMatch = responseText.match(/TEMPLATE_LINK:\s*(https?:\/\/\S+)/i);
-      if (templateMatch && templateMatch[1]) {
-        templateLink = templateMatch[1];
-        console.log("Extracted Template Link:", templateLink);
-      }
-
-      const candidate = fullResponse.candidates?.[0];
-      if (candidate?.content?.parts) {
-        for (const part of candidate.content.parts) {
-          if (part.inlineData) {
-            mainImageUrl = `data:image/png;base64,${part.inlineData.data}`;
-            break;
-          }
-        }
-      }
-      if (!mainImageUrl) throw new Error("The AI model did not return an image for this type. Please try again.");
-      resultImages = [mainImageUrl];
-    }
-    
-    // Save design to database
-    const designResult = await db.run(
-      "INSERT INTO GeneratedDesigns (contact_id, design_type, business_name, industry, description, image_url, template_link, conceptual_template_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-      businessData.contactId,
-      type,
-      businessData.name,
-      businessData.industry,
-      businessData.description,
-      mainImageUrl,
-      templateLink, // Save the extracted external template link
-      selectedTemplate ? selectedTemplate.id : null // Save the ID of the conceptual template used
-    );
-
-    // Send thank-you email
-    if (businessData.contactId && businessData.email) { // Ensure email is available from original businessData or fetched
-      const leadContact = await db.get("SELECT email, name FROM Leads WHERE id = ?", businessData.contactId);
-      if (leadContact) {
-        const mailOptions = {
-          from: process.env.SENDER_EMAIL,
-          to: leadContact.email,
-          subject: `Your AI Design from Get Design AI - ${businessData.name}`,
-          html: `
-            <p>Dear ${leadContact.name || 'User'},</p>
-            <p>Thank you for using Get Design AI to create your design! We're thrilled to help you bring your vision to life.</p>
-            <p>Your generated design concept for "${businessData.name}" (${type}) is attached below:</p>
-            <img src="${mainImageUrl}" alt="Your AI Design" style="max-width: 100%; height: auto; margin: 20px 0;">
-            ${templateLink ? `<p>Here's a highly relevant template link for further editing: <a href="${templateLink}">${templateLink}</a></p>` : ''}
-            <p>Ready to make it even better? Visit us again: <a href="${process.env.PUBLIC_APP_URL}">${process.env.PUBLIC_APP_URL}</a></p>
-            <p>Best regards,</p>
-            <p>The Get Design AI Team</p>
-          `,
-          attachments: [{
-            filename: `${businessData.name}_${type}_design.png`,
-            path: mainImageUrl.startsWith('data:image') ? Buffer.from(mainImageUrl.split(',')[1], 'base64') : mainImageUrl,
-            cid: 'unique@getdesign.cloud' // cid and img src must match
-          }]
-        };
-        try {
-          await transporter.sendMail(mailOptions);
-          console.log("Thank you email sent to:", leadContact.email);
-        } catch (mailError) {
-          console.error("Failed to send thank you email:", mailError);
-        }
-      }
-    }
-
-
-    res.json({
-      id: designResult.lastID.toString(), // Use DB ID
-      templateId: selectedTemplate ? selectedTemplate.id : `GD-${designResult.lastID.toString().slice(-6)}`, // Pass the conceptual template ID
-      templateUrl: "", // This field is not directly used for the conceptual template now
-      templateTitle: `Concept GD-${designResult.lastID.toString().slice(-6)}`,
-      searchQuery: `${type} design for ${businessData.name}`,
-      imageUrl: mainImageUrl,
-      images: resultImages,
-      timestamp: Date.now(),
-      type: type,
-      data: businessData,
-      templateLink: templateLink, // External template link
-      contactId: businessData.contactId,
-    });
-
-  } catch (error) {
-    console.error('API call failed on server:', error);
-    if (req.file) { // Clean up uploaded file if an error occurred
-      try { await promisify(fs.unlink)(req.file.path); } catch (e) { console.error("Error cleaning up uploaded file:", e); }
-    }
-    const errorMessage = handleGeminiError(error); // Use the refined error handler
-    res.status(500).json({ error: errorMessage || "Failed to generate design on the server." });
-  } finally {
-    // Clean up temporary extracted zip directory
-    if (req.file) {
-      try { await promisify(fs.rm)(tempDir, { recursive: true, force: true }); } catch (e) { console.error("Error cleaning up temp zip directory:", e); }
-    }
-  }
-});
-
 // Admin Authentication
 app.post('/api/admin/login', (req, res) => {
   const { username, password } = req.body;
@@ -969,7 +803,8 @@ app.get('/api/admin/leads', authenticateAdmin, async (req, res) => {
   try {
     const leads = await db.all("SELECT id, name, company, email, phone, design_interest, created_at FROM Leads ORDER BY created_at DESC");
     res.json(leads);
-  } catch (err) {
+  }
+  catch (err) {
     console.error("Database error fetching leads:", err);
     res.status(500).json({ error: "Failed to fetch leads." });
   }
@@ -1188,36 +1023,425 @@ app.delete('/api/admin/conceptual-templates/:id', authenticateAdmin, async (req,
 });
 
 
-// Middleware to explicitly prevent caching for index.html
-app.get('/', (req, res, next) => {
-    // If the request is specifically for the root HTML, set no-cache headers
-    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate'); // HTTP 1.1.
-    res.setHeader('Pragma', 'no-cache'); // HTTP 1.0.
-    res.setHeader('Expires', '0'); // Proxies.
-    // Send the file, then prevent further middleware from processing it
-    return res.sendFile(path.join(__dirname, '../dist/index.html'));
+// NEW: Endpoint to create a Design Task (for web designs)
+app.post('/api/design-tasks', upload.single('zipFile'), async (req, res) => {
+  let { type, businessData, logoBase64 } = req.body;
+  
+  if (typeof businessData === 'string') {
+    businessData = JSON.parse(businessData);
+  }
+
+  if (type !== 'web' || !businessData.contactId) {
+    return res.status(400).json({ error: "Invalid request for design task. Only 'web' type with contactId is supported." });
+  }
+
+  // Extract brochureBase64 from parsed businessData if present
+  let brochureBase64 = businessData.brochureBase64;
+  if (typeof brochureBase64 === 'string') brochureBase64 = [brochureBase64];
+  if (!brochureBase64) brochureBase64 = [];
+
+
+  let zipFilePath = null;
+  const tempDir = path.join(os.tmpdir(), `upload-${Date.now()}`); // Temp dir for zip extraction
+
+  try {
+    if (req.file) {
+      await promisify(fs.mkdir)(tempDir, { recursive: true });
+      const zip = new AdmZip(req.file.path);
+      zip.extractAllTo(tempDir, true);
+      zipFilePath = tempDir; // Store path to extracted contents for later use
+    }
+    
+    // Create the Design Task
+    const result = await db.run(
+      `INSERT INTO DesignTasks (contact_id, design_type, business_data, logo_base64, brochure_base64, zip_file_path, status) 
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      businessData.contactId,
+      type,
+      JSON.stringify(businessData),
+      logoBase64 || null,
+      JSON.stringify(brochureBase64),
+      zipFilePath,
+      'pending'
+    );
+
+    res.status(201).json({
+      id: `task-${result.lastID}`,
+      designTaskId: result.lastID,
+      status: 'pending',
+      type: type,
+      imageUrl: '/assets/pending-web-design.svg', // Placeholder image
+      timestamp: Date.now(),
+      data: businessData,
+      contactId: businessData.contactId,
+    });
+
+  } catch (error) {
+    console.error('API call failed on server:', error);
+    if (req.file) {
+      try { await promisify(fs.unlink)(req.file.path); } catch (e) { console.error("Error cleaning up uploaded file:", e); }
+    }
+    if (zipFilePath && fs.existsSync(zipFilePath)) { // Clean up extracted dir on error
+      try { await promisify(fs.rm)(zipFilePath, { recursive: true, force: true }); } catch (e) { console.error("Error cleaning up temp zip directory:", e); }
+    }
+    const errorMessage = handleGeminiError(error);
+    res.status(500).json({ error: errorMessage || "Failed to create design task on the server." });
+  } finally {
+    if (req.file) { // Clean up uploaded zip file
+      try { await promisify(fs.unlink)(req.file.path); } catch (e) { console.error("Error cleaning up uploaded zip file:", e); }
+    }
+  }
 });
 
-// Serve static files from the Vite build output (these should be cache-busted by Vite hashes)
-app.use(express.static(path.join(__dirname, '../dist'), {
-    // For hashed assets (e.g., assets/index-xxxxxxxx.js), a long max-age is fine
-    maxAge: '1y', // Cache assets for 1 year
-    immutable: true, // Tell proxies/browsers that these files won't change
-    lastModified: true,
-    etag: true,
-}));
 
-// For any other routes, serve the index.html (React app)
-// This ensures that refreshing or direct access to client-side routes works
-app.get('*', (req, res) => {
-  // Ensure index.html is *always* sent with no-cache headers when served as a fallback
-  res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
-  res.setHeader('Pragma', 'no-cache');
-  res.setHeader('Expires', '0');
-  res.sendFile(path.join(__dirname, '../dist/index.html'));
+// NEW: Admin API to get all Design Tasks
+app.get('/api/admin/design-tasks', authenticateAdmin, async (req, res) => {
+  const { status } = req.query;
+  let query = `
+    SELECT dt.*, l.name AS contact_name, l.email AS contact_email, l.phone AS contact_phone
+    FROM DesignTasks dt
+    LEFT JOIN Leads l ON dt.contact_id = l.id
+  `;
+  const params = [];
+
+  if (status && status !== 'all') {
+    query += " WHERE dt.status = ?";
+    params.push(status);
+  }
+  query += " ORDER BY dt.created_at DESC";
+
+  try {
+    const tasks = await db.all(query, ...params);
+    res.json(tasks);
+  } catch (err) {
+    console.error("Database error fetching design tasks:", err);
+    res.status(500).json({ error: "Failed to fetch design tasks." });
+  }
 });
 
-// Start the server
-app.listen(port, () => {
-  console.log(`Server listening at http://localhost:${port}`);
+// NEW: Admin API to trigger AI generation for a specific Design Task
+app.post('/api/admin/design-tasks/:taskId/generate', authenticateAdmin, async (req, res) => {
+  const taskId = req.params.taskId;
+
+  try {
+    const designTask = await db.get("SELECT * FROM DesignTasks WHERE id = ?", taskId);
+    if (!designTask) {
+      return res.status(404).json({ error: "Design task not found." });
+    }
+    if (designTask.status !== 'pending') {
+      return res.status(400).json({ error: `Design task is already ${designTask.status}.` });
+    }
+
+    // Update status to generating
+    await db.run("UPDATE DesignTasks SET status = 'generating', updated_at = CURRENT_TIMESTAMP WHERE id = ?", taskId);
+    
+    // Get contact details for email notification
+    const contactDetails = await db.get("SELECT email, name FROM Leads WHERE id = ?", designTask.contact_id);
+
+    // Perform the actual AI generation for the web design
+    const generatedDesign = await performWebDesignGeneration(designTask, contactDetails);
+
+    // Update DesignTask with completed status and link to generated design
+    await db.run(
+      "UPDATE DesignTasks SET status = 'completed', generated_design_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+      generatedDesign.id, taskId
+    );
+
+    // Send email to user that design is ready
+    if (contactDetails && contactDetails.email) {
+      const designLink = `${process.env.PUBLIC_APP_URL || 'https://www.getdesign.cloud'}#result-${generatedDesign.id}`;
+      const mailOptions = {
+        from: process.env.SENDER_EMAIL,
+        to: contactDetails.email,
+        subject: `Your Website Design is Ready from Get Design AI!`,
+        html: `
+          <p>Dear ${contactDetails.name || 'User'},</p>
+          <p>Great news! Your website design concept for "${JSON.parse(designTask.business_data).name}" has been generated and is ready for your review.</p>
+          <p>You can view your design here: <a href="${designLink}">${designLink}</a></p>
+          <img src="${generatedDesign.imageUrl}" alt="Your Website Design" style="max-width: 100%; height: auto; margin: 20px 0;">
+          <p>Best regards,</p>
+          <p>The Get Design AI Team</p>
+        `,
+        attachments: [{
+          filename: `${JSON.parse(designTask.business_data).name}_website_design.png`,
+          path: generatedDesign.imageUrl.startsWith('data:image') ? Buffer.from(generatedDesign.imageUrl.split(',')[1], 'base64') : generatedDesign.imageUrl,
+          cid: 'unique@getdesign.cloud'
+        }]
+      };
+      try {
+        await transporter.sendMail(mailOptions);
+        console.log("Website design ready email sent to:", contactDetails.email);
+      } catch (mailError) {
+        console.error("Failed to send website ready email:", mailError);
+      }
+    }
+
+    res.json(generatedDesign);
+
+  } catch (error) {
+    console.error(`Error generating web design for task ${taskId}:`, error);
+    await db.run("UPDATE DesignTasks SET status = 'failed', updated_at = CURRENT_TIMESTAMP WHERE id = ?", taskId); // Mark as failed
+    const errorMessage = handleGeminiError(error);
+    res.status(500).json({ error: errorMessage || "Failed to generate website design." });
+  } finally {
+    // Clean up temporary zip extraction directory if it exists and was created for this task
+    const task = await db.get("SELECT zip_file_path FROM DesignTasks WHERE id = ?", taskId);
+    if (task?.zip_file_path && fs.existsSync(task.zip_file_path)) {
+      try { await promisify(fs.rm)(task.zip_file_path, { recursive: true, force: true }); } catch (e) { console.error("Error cleaning up task's temp zip directory:", e); }
+    }
+  }
 });
+
+
+// API Endpoint for general design generation (now also handles web via task creation)
+app.post('/api/generate-design', upload.single('zipFile'), async (req, res) => {
+  if (!ai) {
+    return res.status(500).json({ error: "Server API Key not configured. Please contact support." });
+  }
+
+  let { type, businessData, logoBase64 } = req.body;
+  
+  // businessData comes as string from FormData, parse it
+  if (typeof businessData === 'string') {
+    businessData = JSON.parse(businessData);
+  }
+
+  // Extract brochureBase64 from parsed businessData if present
+  let brochureBase64 = businessData.brochureBase64;
+  if (typeof brochureBase64 === 'string') brochureBase64 = [brochureBase64];
+  if (!brochureBase64) brochureBase64 = [];
+
+
+  let descriptionFromZip = ''; // To store description extracted from zip
+  let logoFromZip = ''; // To store logo extracted from zip
+  let brochureFromZip = []; // To store brochure extracted from zip
+
+  const tempDir = path.join(os.tmpdir(), `upload-${Date.now()}`); // Temp dir for zip extraction
+  let zipFileCreated = false;
+
+  try {
+    if (req.file) { // If a zip file was uploaded
+      console.log('Zip file received:', req.file.originalname);
+      await promisify(fs.mkdir)(tempDir, { recursive: true }); // Create temp dir
+      zipFileCreated = true;
+
+      const zip = new AdmZip(req.file.path);
+      zip.extractAllTo(tempDir, true);
+      console.log('Zip extracted to:', tempDir);
+
+      const files = await promisify(fs.readdir)(tempDir);
+      for (const file of files) {
+        const filePath = path.join(tempDir, file);
+        const ext = path.path.extname(file).toLowerCase(); // Changed from path.extname directly
+        const fileName = path.basename(file).toLowerCase();
+
+        if (['.png', '.jpg', '.jpeg', '.webp'].includes(ext)) {
+          const fileBase64 = fs.readFileSync(filePath, { encoding: 'base64' });
+          if (fileName.includes('logo') && !logoFromZip) {
+            logoFromZip = `data:image/${ext.substring(1)};base64,${fileBase64}`;
+          } else if (fileName.includes('brochure') && !brochureFromZip.length) {
+            brochureFromZip.push(`data:image/${ext.substring(1)};base64,${fileBase64}`);
+          }
+          // If no specific name, just take the first image found as a generic asset
+          if (!logoFromZip && !brochureFromZip.length) {
+            logoFromZip = `data:image/${ext.substring(1)};base64,${fileBase64}`; // Fallback: use first image as logo
+          }
+        } else if (['.txt', '.md'].includes(ext)) {
+          const fileContent = fs.readFileSync(filePath, 'utf8');
+          if (fileName.includes('description') || fileName.includes('brief')) {
+            descriptionFromZip += fileContent + '\n';
+          }
+        } else if (['.pdf'].includes(ext)) {
+          const fileBase64 = fs.readFileSync(filePath, { encoding: 'base64' });
+          if (fileName.includes('brochure')) {
+            brochureFromZip.push(`data:application/pdf;base64,${fileBase64}`);
+          }
+        } else if (['.docx'].includes(ext)) {
+          const fileBase64 = fs.readFileSync(filePath, { encoding: 'base64' });
+          if (fileName.includes('brochure')) {
+            brochureFromZip.push(`data:application/vnd.openxmlformats-officedocument.wordprocessingml.document;base64,${fileBase64}`);
+          }
+        }
+      }
+      // Prioritize zip-extracted content over form-based uploads for images
+      logoBase64 = logoFromZip || logoBase64;
+      brochureBase64 = brochureFromZip.length > 0 ? brochureFromZip : (brochureBase64 || []); // Treat as array from zip
+
+      // Augment or replace description
+      businessData.description = descriptionFromZip || businessData.description;
+      if (descriptionFromZip && !businessData.name) {
+        businessData.name = req.file.originalname.replace('.zip', '') || 'Zip Project';
+      }
+
+    } else {
+      console.log('No zip file uploaded, using form data.');
+    }
+
+    // --- Process brochureBase64 (can be string or string[]) ---
+    const brochureTextContent = [];
+    const brochureImageParts = [];
+
+    const brochureFiles = Array.isArray(brochureBase64) ? brochureBase64 : (brochureBase64 ? [brochureBase64] : []);
+
+    for (const dataUrl of brochureFiles) {
+      const parsed = parseDataUrl(dataUrl);
+      if (parsed) {
+        const { mimeType, data } = parsed;
+        if (mimeType.startsWith('image/')) {
+          brochureImageParts.push({ inlineData: { mimeType, data } });
+        } else if (mimeType === 'application/pdf') {
+          try {
+            const buffer = Buffer.from(data, 'base64');
+            const pdfData = await pdfParse(buffer);
+            brochureTextContent.push(pdfData.text);
+          } catch (pdfError) {
+            console.error("Error parsing PDF:", pdfError);
+          }
+        } else if (mimeType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
+          try {
+            const buffer = Buffer.from(data, 'base64');
+            const result = await mammoth.extractRawText({ buffer: buffer });
+            brochureTextContent.push(result.value);
+          } catch (docxError) {
+            console.error("Error parsing DOCX:", docxError);
+          }
+        } else {
+          console.warn("Unsupported brochure file type:", mimeType);
+        }
+      }
+    }
+
+    // --- Template Selection & Dynamic Content Generation ---
+    const selectedTemplate = await selectTemplate(type, businessData.industry, businessData.visualStyle);
+    let templateGuidancePrompt = '';
+    let generatedHeadline = businessData.name; // Default to business name
+    let generatedBody = businessData.description; // Default to description
+    let generatedCta = 'Learn More'; // Default CTA
+
+    // Aspect ratio for image generation (default for single images)
+    let aspectRatio = "1:1"; // Default to square
+    if (type === 'logo') aspectRatio = "1:1";
+    if (type === 'social') {
+      if (businessData.socialPlatform === 'instagram') aspectRatio = "1:1";
+      if (businessData.socialPlatform === 'facebook') aspectRatio = "16:9";
+      if (businessData.socialPlatform === 'linkedin') aspectRatio = "4:1"; // LinkedIn banner typically wide
+    }
+    if (type === 'identity') aspectRatio = "4:3"; // Good for a flat-lay overview
+
+
+    if (businessData.postContent) {
+      generatedHeadline = businessData.postContent.split('\n')[0] || generatedHeadline;
+      generatedBody = businessData.postContent.split('\n').slice(1).join(' ') || generatedBody;
+      // CTA remains default or can be derived if a specific pattern is expected in postContent
+    } else if (selectedTemplate) {
+      // Dynamic template guidance based on whether a thumbnailUrl is available
+      if (selectedTemplate.thumbnail_url && selectedTemplate.thumbnail_url.trim() !== '') {
+        templateGuidancePrompt = `
+          VISUAL TEMPLATE REFERENCE: An image part is provided. This image represents a template.
+          Your task is to:
+          1. Analyze its layout, composition, color scheme, typography, and overall aesthetic.
+          2. Create a *new design* for the current business that *adopts and adapts* the core visual style of the provided template.
+          3. DO NOT generate an identical copy. Evolve the style to fit the new context.
+          4. Ensure the new design reflects the business name, industry, and project details provided.
+          5. Replace any generic stock imagery from the template with relevant imagery for the new business.
+          6. Use the provided textual content (headline, body, CTA) within the design, fitting it into the adapted template structure.
+          
+          The following text provides further nuance about the template's original concept: "${selectedTemplate.prompt_hint}"
+        `;
+      } else {
+        templateGuidancePrompt = `
+          DESIGN CONCEPT: Base the overall layout, composition, and visual elements on the following template description. Adapt its core aesthetics and structure to fit the new business. Replace generic elements with relevant content.
+          TEMPLATE DESCRIPTION: "${selectedTemplate.prompt_hint}"
+        `;
+      }
+      
+      // If no postContent, generate content for the design
+      const templateGeneratedContent = JSON.parse(selectedTemplate.generated_content_examples || '{}');
+
+      const contentGenerationPrompt = `
+        Based on the following business details and industry, and considering a template with these example content elements:
+        Business Name: "${businessData.name}"
+        Industry: "${businessData.industry}"
+        Description: "${businessData.description}"
+        
+        Generate a concise, impactful marketing headline, a short body text (1-2 sentences), and a clear call-to-action (CTA).
+        Use the template's example content as inspiration for tone and style, but tailor it to the current business and industry.
+        Example Headline: "${templateGeneratedContent.headline || 'Inspiring Headline'}"
+        Example Body: "${templateGeneratedContent.body || 'Compelling Body Text'}"
+        Example CTA: "${templateGeneratedContent.cta || 'Learn More'}"
+
+        Output ONLY in JSON format with keys "headline", "body", "cta".
+        Example: {"headline": "Your Title", "body": "Your description.", "cta": "Click Here"}
+      `;
+
+      try {
+        const contentAI = new GoogleGenAI({ apiKey: GEMINI_API_KEY });
+        const contentResponse = await contentAI.models.generateContent({
+          model: 'gemini-2.5-flash', // Use a text-only model for content generation
+          contents: [{ text: contentGenerationPrompt }],
+          config: {
+            responseMimeType: "application/json",
+            responseSchema: {
+              type: Type.OBJECT,
+              properties: {
+                headline: { type: Type.STRING },
+                body: { type: Type.STRING },
+                cta: { type: Type.STRING },
+              },
+              propertyOrdering: ["headline", "body", "cta"],
+            },
+          },
+        });
+        const contentJson = JSON.parse(contentResponse.text);
+        generatedHeadline = contentJson.headline || generatedHeadline;
+        generatedBody = contentJson.body || contentJson.text || generatedBody; // Fallback to contentJson.text if body is empty (sometimes model just gives raw text)
+        generatedCta = contentJson.cta || generatedCta;
+        console.log("Generated Content (AI):", generatedHeadline, generatedBody, generatedCta);
+
+      } catch (contentError) {
+        console.warn("Failed to generate content via AI:", contentError);
+        // Fallback to template examples or generic if AI content generation fails
+        generatedHeadline = templateGeneratedContent.headline || generatedHeadline;
+        generatedBody = templateGeneratedContent.body || generatedBody;
+        generatedCta = templateGeneratedContent.cta || generatedCta;
+      }
+    }
+
+
+    // --- Gemini Prompt Construction ---
+    const finalGeminiParts = [];
+
+    // Add selected template's thumbnail image as visual reference IF AVAILABLE
+    if (selectedTemplate && selectedTemplate.thumbnail_url && selectedTemplate.thumbnail_url.trim() !== '') {
+      try {
+        const imageResponse = await fetch(selectedTemplate.thumbnail_url);
+        if (!imageResponse.ok) {
+          throw new Error(`Failed to fetch template thumbnail from ${selectedTemplate.thumbnail_url}: ${imageResponse.statusText}`);
+        }
+        const imageBuffer = await imageResponse.arrayBuffer();
+        const base64Image = Buffer.from(imageBuffer).toString('base64');
+        const contentType = imageResponse.headers.get('content-type') || 'image/jpeg'; // Default to jpeg if unknown
+        finalGeminiParts.push({ inlineData: { mimeType: contentType, data: base64Image } });
+      } catch (imgFetchError) {
+        console.warn(`Could not fetch or process template thumbnail from URL: ${selectedTemplate.thumbnail_url}`, imgFetchError);
+        // Continue without the thumbnail if it fails, relying on text promptHint
+      }
+    }
+
+
+    // 1. Core textual instructions (template guidance, branding, description, content)
+    let industryInstruction = `
+      INDUSTRY CONTEXT: "${businessData.industry || 'General Business'}".
+      VISUAL STYLE PREFERENCE: "${businessData.visualStyle || 'Adapt to the template\'s dominant style'}"
+      COLOR PALETTE GUIDANCE: "${businessData.customColorPalette || 'Derive main colors from logo (if provided) or industry norms, ensuring a harmonious and professional look.'}"
+      DESIGN PRINCIPLES: Ensure the design is modern, professional, visually appealing, and directly relevant to the business and chosen style.
+    `;
+
+    let specificPrompt = '';
+    if (type === 'logo') {
+      specificPrompt = `DESIGN TYPE: Logo. Create a standalone logo. LOGO STYLE: "${businessData.logoStyle || '3d'}".`;
+    } else if (type === 'identity') {
+      specificPrompt = `DESIGN TYPE: Brand Identity Flat-Lay. Create a flat-lay visual showcasing brand identity elements (e.g., business card, letterhead, envelope, mockups).`;
+    } else if (type === 'social') {
+      specificPrompt = `DESIGN TYPE: Social Media Post. PLATFORM: "${businessData.socialPlatform || 'Instagram'}". Focus on creating a compelling visual for online sharing.`;
+    

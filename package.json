@@ -37,6 +37,6 @@
     "vite": "^5.2.0",
     "@types/pdf-parse": "^1.1.1",
     "@types/mammoth": "^1.4.3",
-    "@types/exceljs": "^3.8.0"
+    "@types/exceljs": "^4.4.0"
   }
 }

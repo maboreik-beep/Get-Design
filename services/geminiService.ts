@@ -1,5 +1,5 @@
 // services/geminiService.ts
-import { BusinessData, DesignType, GeneratedResult } from '../types';
+import { BusinessData, DesignType, GeneratedResult, GeneratedDesignStatus } from '../types';
 
 /**
  * Centralized error handler for fetch API responses from backend.
@@ -13,11 +13,11 @@ async function handleBackendResponseError(response: Response) {
 }
 
 /**
- * Calls the backend API to generate a design.
+ * Calls the backend API to generate a design, or create a design task for web designs.
  */
 export async function generateDesign(
   designType: DesignType,
-  mode: 'text' | 'zip', // Not directly used in frontend but kept for consistency if backend uses it
+  inputMode: 'form' | 'zip', // Used to determine how to send files
   businessData: BusinessData,
   logoBase64: string | null,
   onStatusUpdate: (status: string) => void,
@@ -60,32 +60,100 @@ export async function generateDesign(
     "Almost done, just a moment!",
   ];
   let messageIndex = 0;
-  const statusInterval = setInterval(() => {
-    if (messageIndex < statusMessages.length) {
-      onStatusUpdate(statusMessages[messageIndex]);
-      messageIndex++;
-    } else {
-      // Loop or stop
-      clearInterval(statusInterval);
-    }
-  }, 5000); // Update status every 5 seconds
+  // Fix: In a browser environment, setInterval returns a number.
+  let statusInterval: number | null = null; 
+
+  if (designType !== 'web') { // Only show progress for immediate generations
+    statusInterval = setInterval(() => {
+      if (messageIndex < statusMessages.length) {
+        onStatusUpdate(statusMessages[messageIndex]);
+        messageIndex++;
+      } else {
+        clearInterval(statusInterval!);
+      }
+    }, 5000); // Update status every 5 seconds
+  }
 
   try {
-    const response = await fetch('/api/generate-design', {
+    const endpoint = designType === 'web' ? '/api/design-tasks' : '/api/generate-design';
+    
+    const response = await fetch(endpoint, {
       method: 'POST',
       body: formData, // FormData automatically sets 'Content-Type': 'multipart/form-data'
     });
 
-    clearInterval(statusInterval); // Stop status updates once response is received
+    if (statusInterval) clearInterval(statusInterval); // Stop status updates once response is received
     await handleBackendResponseError(response); // Handle HTTP errors
     const result: GeneratedResult = await response.json();
-    onStatusUpdate("Design complete!");
+    
+    if (designType === 'web') {
+      onStatusUpdate("Website design request submitted for designer review.");
+    } else {
+      onStatusUpdate("Design complete!");
+    }
     return result;
 
   } catch (error: any) {
-    clearInterval(statusInterval); // Stop status updates on error
+    if (statusInterval) clearInterval(statusInterval); // Stop status updates on error
     onStatusUpdate("Error during generation.");
     console.error("Error generating design:", error);
+    throw error;
+  }
+}
+
+/**
+ * Admin function to trigger AI generation for a pending web design task.
+ */
+export async function triggerWebDesignGeneration(
+  taskId: number,
+  onStatusUpdate: (status: string) => void,
+): Promise<GeneratedResult> {
+  onStatusUpdate("AI generation for website design started...");
+
+  const token = localStorage.getItem('adminToken');
+  if (!token) {
+    throw new Error("Admin authentication token not found.");
+  }
+
+  const statusMessages = [
+    "Processing task details...",
+    "Preparing AI model for website generation...",
+    "Generating homepage concept...",
+    "Generating additional page layouts...",
+    "Refining website mockups...",
+    "Finalizing image renders...",
+    "Website design concept ready!",
+  ];
+  let messageIndex = 0;
+  // Fix: In a browser environment, setInterval returns a number.
+  const statusInterval: number = setInterval(() => { 
+    if (messageIndex < statusMessages.length) {
+      onStatusUpdate(statusMessages[messageIndex]);
+      messageIndex++;
+    } else {
+      clearInterval(statusInterval);
+    }
+  }, 7000); // Update status every 7 seconds for potentially longer web generation
+
+  try {
+    const response = await fetch(`/api/admin/design-tasks/${taskId}/generate`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        // 'Content-Type': 'application/json' is not needed for a POST without body,
+        // but if it were to send any flags, it would be here.
+      },
+    });
+
+    clearInterval(statusInterval);
+    await handleBackendResponseError(response);
+    const result: GeneratedResult = await response.json();
+    onStatusUpdate("Website design generation completed!");
+    return result;
+  } catch (error: any) {
+    clearInterval(statusInterval);
+    onStatusUpdate("Error during website generation.");
+    console.error("Error triggering web design generation:", error);
     throw error;
   }
 }

@@ -53,14 +53,18 @@ export interface BusinessData {
   brochureBase64?: string | string[] | null; // Updated to support array of base64 strings
 }
 
+export type GeneratedDesignStatus = 'pending' | 'generating' | 'completed' | 'failed'; // For web designs
+
 export interface GeneratedResult {
-  id: string; // Client-side generated ID
+  id: string; // Client-side generated ID (or DB ID)
+  designTaskId?: number; // New: Link to DesignTask if it's a web design
+  status?: GeneratedDesignStatus; // New: Status for web designs (e.g., pending)
   templateId?: string; // Updated: Now stores the conceptual template ID (e.g., 'logo-L1-minimalist-tech')
-  templateUrl?: string;
+  templateUrl?: string; // For external templates, if applicable
   templateTitle?: string; 
   searchQuery?: string;
-  imageUrl: string;
-  images?: string[];     
+  imageUrl: string; // Main image URL (or placeholder for pending)
+  images?: string[]; // Multiple images for web/brochure     
   timestamp: number;
   type: DesignType;
   data: BusinessData;
@@ -118,7 +122,27 @@ export interface GeneratedDesignRecord {
   template_link?: string;
   conceptual_template_id?: string; // New field for conceptual template ID
   created_at: string;
-  // Potentially include contact info if joined, or fetch separately
+  // Joined contact info
   contact_email?: string; 
+  contact_phone?: string;
+}
+
+export type DesignTaskStatus = 'pending' | 'generating' | 'completed' | 'failed' | 'cancelled';
+
+export interface DesignTask {
+  id: number;
+  contact_id: number;
+  design_type: DesignType;
+  business_data: string; // JSON string of BusinessData
+  logo_base64: string | null;
+  brochure_base64: string | null; // JSON string of string[]
+  zip_file_path: string | null; // Path to extracted zip content for re-use
+  status: DesignTaskStatus;
+  generated_design_id: number | null; // Link to GeneratedDesigns if completed
+  created_at: string;
+  updated_at: string;
+  // Joined contact info for display
+  contact_name?: string;
+  contact_email?: string;
   contact_phone?: string;
 }

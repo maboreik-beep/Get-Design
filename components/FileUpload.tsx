@@ -92,7 +92,7 @@ export const FileUpload = <T extends string | File = string>({
     }
 
     // Convert FileList to an array of File objects for easier and safer typing
-    const fileListArray = Array.from(files);
+    const fileListArray: File[] = Array.from(files);
     setFileNames(fileListArray.map(f => f.name));
     setPreview(null); // Clear image preview for multi-file/non-image uploads
 
@@ -103,9 +103,7 @@ export const FileUpload = <T extends string | File = string>({
           const result = await processFile(file);
           processedResults.push(result);
         } catch (error: unknown) {
-          // Safely handle 'error' which is of type 'unknown'.
-          // 'file' is correctly typed as 'File' here from the Array.from(files) iteration.
-          const fileName = file.name || 'Unknown File';
+          const fileName = (error instanceof Error && file.name) ? file.name : 'Unknown File'; // Safely access file.name
           console.error(`Error processing file ${fileName}:`, error instanceof Error ? error.message : String(error));
         }
       }
@@ -113,17 +111,14 @@ export const FileUpload = <T extends string | File = string>({
     } else {
       // Single file logic (existing)
       try {
-        // 'fileListArray[0]' is guaranteed to be 'File' here due to the initial length check.
-        const file = fileListArray[0]; 
+        const file: File = fileListArray[0]; 
         const result = await processFile(file); // result is now of type T
         if (typeof result === 'string' && file.type.startsWith('image/')) {
           setPreview(result); // Show image preview for single image
         }
         onFileSelect(result); 
       } catch (error: unknown) {
-        // Safely handle 'error' which is of type 'unknown'.
-        // 'fileListArray[0]' is guaranteed to be 'File' here due to the initial length check.
-        const fileName = fileListArray[0]?.name || 'Unknown File'; 
+        const fileName = (error instanceof Error && fileListArray[0]?.name) ? fileListArray[0].name : 'Unknown File'; // Safely access file.name
         console.error(`Error processing single file ${fileName}:`, error instanceof Error ? error.message : String(error));
       }
     }

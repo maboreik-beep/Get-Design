@@ -1,8 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { LeadRecord, GeneratedDesignRecord, Language, ConceptualTemplate, DesignType, VisualStyle, GeneratedContentExamples, TemplateCategory } from '../types';
+import { LeadRecord, GeneratedDesignRecord, Language, ConceptualTemplate, DesignType, VisualStyle, GeneratedContentExamples, TemplateCategory, DesignTask, DesignTaskStatus } from '../types';
 import { TRANSLATIONS, TEMPLATE_CATEGORIES } from '../constants';
+import { triggerWebDesignGeneration } from '../services/geminiService'; // New import
 
-export const AdminDashboard: React.FC = () => {
+interface AdminDashboardProps {
+  PUBLIC_APP_URL: string;
+}
+
+export const AdminDashboard: React.FC<AdminDashboardProps> = ({ PUBLIC_APP_URL }) => {
   const [lang] = useState<Language>('en'); 
   const t = TRANSLATIONS[lang as Language];
 
@@ -14,14 +19,16 @@ export const AdminDashboard: React.FC = () => {
   const [leads, setLeads] = useState<LeadRecord[]>([]);
   const [designs, setDesigns] = useState<GeneratedDesignRecord[]>([]);
   const [conceptualTemplates, setConceptualTemplates] = useState<ConceptualTemplate[]>([]);
+  const [designTasks, setDesignTasks] = useState<DesignTask[]>([]); // New state for Design Tasks
 
   const [loading, setLoading] = useState(false);
   const [dataError, setDataError] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<'leads' | 'designs' | 'templates'>('leads');
+  const [activeTab, setActiveTab] = useState<'leads' | 'designs' | 'templates' | 'design-tasks'>('leads'); // New tab
 
   const [searchEmail, setSearchEmail] = useState('');
   const [searchPhone, setSearchPhone] = useState('');
   const [filterTemplateCategory, setFilterTemplateCategory] = useState<TemplateCategory | 'all'>('all');
+  const [filterDesignTaskStatus, setFilterDesignTaskStatus] = useState<DesignTaskStatus | 'all'>('all');
 
 
   // Template Modal State
@@ -57,12 +64,14 @@ export const AdminDashboard: React.FC = () => {
         fetchDesigns();
       } else if (activeTab === 'templates') {
         fetchConceptualTemplates();
+      } else if (activeTab === 'design-tasks') { // New fetch for design tasks
+        fetchDesignTasks();
       }
     } else if (window.location.pathname === '/admin' && !isAuthenticated) {
       // If on admin route but not authenticated, ensure tabs don't try to load
       setActiveTab('leads'); 
     }
-  }, [isAuthenticated, activeTab, filterTemplateCategory]); // Added filterTemplateCategory to dependencies
+  }, [isAuthenticated, activeTab, filterTemplateCategory, filterDesignTaskStatus]); // Added filterDesignTaskStatus
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -83,6 +92,7 @@ export const AdminDashboard: React.FC = () => {
         if (activeTab === 'leads') fetchLeads();
         else if (activeTab === 'designs') fetchDesigns();
         else if (activeTab === 'templates') fetchConceptualTemplates();
+        else if (activeTab === 'design-tasks') fetchDesignTasks(); // New
       } else {
         setLoginError(data.error || t.admin_invalid_credentials);
       }
@@ -182,6 +192,31 @@ export const AdminDashboard: React.FC = () => {
     }
   };
 
+  const fetchDesignTasks = async () => {
+    setLoading(true);
+    setDataError(null);
+    try {
+      const queryParams = new URLSearchParams();
+      if (filterDesignTaskStatus !== 'all') {
+        queryParams.append('status', filterDesignTaskStatus);
+      }
+
+      const response = await authenticatedFetch(`/api/admin/design-tasks?${queryParams.toString()}`);
+      const data = await response.json();
+
+      if (response.ok) {
+        setDesignTasks(data);
+      } else {
+        setDataError(data.error || t.error_generic);
+      }
+    } catch (err: any) {
+      console.error("Failed to fetch design tasks:", err);
+      setDataError(err.message || t.error_generic);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleLogout = () => {
     localStorage.removeItem('adminToken');
     setIsAuthenticated(false);
@@ -190,6 +225,7 @@ export const AdminDashboard: React.FC = () => {
     setLeads([]);
     setDesigns([]);
     setConceptualTemplates([]);
+    setDesignTasks([]); // Clear tasks
     setLoginError(null);
     setDataError(null);
   };
@@ -306,6 +342,38 @@ export const AdminDashboard: React.FC = () => {
     }
   };
 
+  // --- Design Task Handlers ---
+  const handleTriggerWebDesignGeneration = async (taskId: number) => {
+    if (!window.confirm("Are you sure you want to trigger AI generation for this website task? This will consume AI credits.")) {
+      return;
+    }
+    setLoading(true);
+    try {
+      // Optimistic update
+      setDesignTasks(prev => prev.map(task => 
+        task.id === taskId ? { ...task, status: 'generating' } : task
+      ));
+      
+      const result = await triggerWebDesignGeneration(taskId, (status) => console.log(`Task ${taskId} status: ${status}`));
+      console.log("AI Generation Result:", result);
+      await fetchDesignTasks(); // Refresh list to show completed status
+    } catch (err: any) {
+      console.error("Failed to trigger web design generation:", err);
+      setDataError(err.message || t.error_generic);
+      setDesignTasks(prev => prev.map(task => 
+        task.id === taskId ? { ...task, status: 'failed' } : task // Revert status on error
+      ));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleViewGeneratedDesign = (designId: number) => {
+    // Construct the direct link to the generated design on the public app
+    const designLink = `${PUBLIC_APP_URL}#result-${designId}`; // Assuming App.tsx can handle hash routing for specific designs
+    window.open(designLink, '_blank');
+  };
+
   const handleExport = async (type: 'leads' | 'designs') => {
     setLoading(true);
     setDataError(null);
@@ -380,7 +448,10 @@ export const AdminDashboard: React.FC = () => {
       <div className="container mx-auto max-w-7xl">
         <div className="flex justify-between items-center mb-8">
           <h1 className="text-3xl font-bold text-brand-green">
-            {activeTab === 'leads' ? t.admin_leads_title : activeTab === 'designs' ? t.admin_designs_title : t.admin_tab_templates}
+            {activeTab === 'leads' ? t.admin_leads_title : 
+             activeTab === 'designs' ? t.admin_designs_title : 
+             activeTab === 'templates' ? t.admin_tab_templates : 
+             t.admin_tab_design_tasks}
           </h1>
           <div className="flex gap-4">
             <button 
@@ -388,6 +459,7 @@ export const AdminDashboard: React.FC = () => {
                 if (activeTab === 'leads') fetchLeads();
                 else if (activeTab === 'designs') fetchDesigns();
                 else if (activeTab === 'templates') fetchConceptualTemplates();
+                else if (activeTab === 'design-tasks') fetchDesignTasks();
               }} 
               className="px-4 py-2 bg-gray-800 rounded-lg hover:bg-gray-700 transition-colors"
               disabled={loading}
@@ -426,6 +498,13 @@ export const AdminDashboard: React.FC = () => {
             disabled={loading}
           >
             {t.admin_tab_templates}
+          </button>
+          <button 
+            className={`py-2 px-4 text-lg font-medium ${activeTab === 'design-tasks' ? 'text-brand-green border-b-2 border-brand-green' : 'text-gray-400 hover:text-white'}`}
+            onClick={() => setActiveTab('design-tasks')}
+            disabled={loading}
+          >
+            {t.admin_tab_design_tasks}
           </button>
         </div>
 
@@ -641,7 +720,7 @@ export const AdminDashboard: React.FC = () => {
                             <td className="p-4 text-gray-400 text-xs max-w-xs overflow-hidden text-ellipsis whitespace-nowrap">{template.promptHint}</td>
                             <td className="p-4">
                               {template.thumbnailUrl ? (
-                                <img src={template.thumbnailUrl} alt="Thumbnail" className="w-16 h-12 object-contain rounded border border-gray-700" />
+                                <img src={template.thumbnailUrl} alt="Thumbnail" className="w-16 h-12 object-contain rounded-md border border-gray-700" />
                               ) : (
                                 <span className="text-gray-500 text-xs">No Image</span>
                               )}
@@ -807,6 +886,116 @@ export const AdminDashboard: React.FC = () => {
                     </div>
                   </div>
                 )}
+              </>
+            )}
+
+            {activeTab === 'design-tasks' && ( // New tab for Design Tasks
+              <>
+                <div className="flex justify-between items-center mb-6">
+                  <select
+                    value={filterDesignTaskStatus}
+                    onChange={(e) => setFilterDesignTaskStatus(e.target.value as DesignTaskStatus | 'all')}
+                    className="bg-black/50 border border-gray-700 rounded-lg p-2 text-white focus:border-brand-green focus:outline-none"
+                  >
+                    <option value="all">All Statuses</option>
+                    <option value="pending">{t.task_status_pending}</option>
+                    <option value="generating">{t.task_status_generating}</option>
+                    <option value="completed">{t.task_status_completed}</option>
+                    <option value="failed">{t.task_status_failed}</option>
+                    <option value="cancelled">{t.task_status_cancelled}</option>
+                  </select>
+                </div>
+
+                <div className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden shadow-xl overflow-x-auto">
+                  <table className="w-full text-left border-collapse">
+                    <thead>
+                      <tr className="bg-gray-800 text-gray-400 text-sm uppercase tracking-wider">
+                        <th className="p-4 font-semibold">{t.admin_col_id}</th>
+                        <th className="p-4 font-semibold">{t.admin_col_requested_at}</th>
+                        <th className="p-4 font-semibold">{t.admin_col_contact_info}</th>
+                        <th className="p-4 font-semibold">{t.admin_col_request_type}</th>
+                        <th className="p-4 font-semibold">{t.admin_col_business_details}</th>
+                        <th className="p-4 font-semibold">{t.admin_col_status}</th>
+                        <th className="p-4 font-semibold">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-800">
+                      {designTasks.length === 0 ? (
+                        <tr>
+                          <td colSpan={7} className="p-8 text-center text-gray-500">
+                            {t.admin_no_design_tasks}
+                          </td>
+                        </tr>
+                      ) : (
+                        designTasks.map((task) => (
+                          <tr key={task.id} className="hover:bg-gray-800/50 transition-colors">
+                            <td className="p-4 text-gray-300 text-sm font-medium">{task.id}</td>
+                            <td className="p-4 text-gray-400 text-sm whitespace-nowrap">
+                              {new Date(task.created_at).toLocaleDateString()}
+                            </td>
+                            <td className="p-4 text-sm">
+                              <p className="font-medium">{task.contact_name}</p>
+                              <a href={`mailto:${task.contact_email}`} className="text-brand-green hover:underline">
+                                {task.contact_email}
+                              </a>
+                              <p className="text-gray-400">{task.contact_phone}</p>
+                            </td>
+                            <td className="p-4 text-sm capitalize">{t[task.design_type as keyof typeof t] as string}</td>
+                            <td className="p-4 text-gray-300 text-xs max-w-xs overflow-hidden text-ellipsis whitespace-nowrap">
+                              {/* Parse business_data JSON to display relevant info */}
+                              {(() => {
+                                try {
+                                  const bd = JSON.parse(task.business_data);
+                                  return (
+                                    <>
+                                      <p className="font-medium">{bd.name}</p>
+                                      <p>{bd.industry}</p>
+                                      <p>{bd.description}</p>
+                                    </>
+                                  );
+                                } catch {
+                                  return task.business_data;
+                                }
+                              })()}
+                            </td>
+                            <td className="p-4 text-sm whitespace-nowrap">
+                              <span className={`px-2 py-1 rounded-full text-xs font-semibold 
+                                ${task.status === 'pending' ? 'bg-yellow-900 text-yellow-300' :
+                                  task.status === 'generating' ? 'bg-blue-900 text-blue-300' :
+                                  task.status === 'completed' ? 'bg-green-900 text-green-300' :
+                                  'bg-red-900 text-red-300'}`}>
+                                {t[`task_status_${task.status}` as keyof typeof t] as string}
+                              </span>
+                            </td>
+                            <td className="p-4 whitespace-nowrap">
+                              {task.status === 'pending' && (
+                                <button 
+                                  onClick={() => handleTriggerWebDesignGeneration(task.id)}
+                                  className="px-3 py-1 bg-brand-green text-black font-bold rounded-lg hover:bg-lime-500 transition-colors text-xs"
+                                  disabled={loading}
+                                >
+                                  {loading ? 'Processing...' : t.admin_action_generate}
+                                </button>
+                              )}
+                              {task.status === 'completed' && task.generated_design_id && (
+                                <button 
+                                  onClick={() => handleViewGeneratedDesign(task.generated_design_id!)}
+                                  className="px-3 py-1 bg-blue-600 text-white rounded-lg hover:bg-blue-500 transition-colors text-xs"
+                                  disabled={loading}
+                                >
+                                  {t.admin_action_view_design}
+                                </button>
+                              )}
+                              {(task.status === 'failed' || task.status === 'cancelled') && (
+                                <span className="text-gray-500 text-xs">{t[`task_status_${task.status}` as keyof typeof t] as string}</span>
+                              )}
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
               </>
             )}
           </>
