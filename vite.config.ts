@@ -6,7 +6,7 @@ export default defineConfig(({ mode }) => {
   // `loadEnv` might still be useful if other VITE_ prefixed variables are used by the frontend.
   // The `define` for API_KEY is removed as the frontend no longer uses it directly.
   // FIX: Cast process to any to resolve TypeScript error for 'cwd' property.
-  const env = loadEnv(mode, (process as any).cwd(), '');
+  loadEnv(mode, (process as any).cwd(), ''); // Call loadEnv, but do not assign to an unused variable
 
   return {
     plugins: [react()],

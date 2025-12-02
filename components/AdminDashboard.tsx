@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { LeadRecord, GeneratedDesignRecord } from '../types';
+import { LeadRecord, GeneratedDesignRecord, Language } from '../types';
 import { TRANSLATIONS } from '../constants';
 
 export const AdminDashboard: React.FC = () => {
-  const [lang] = useState('en'); // Assuming admin dashboard is primarily English for now
+  const [lang] = useState<Language>('en'); // Assuming admin dashboard is primarily English for now
   const t = TRANSLATIONS[lang];
 
   const [isAuthenticated, setIsAuthenticated] = useState(false);
