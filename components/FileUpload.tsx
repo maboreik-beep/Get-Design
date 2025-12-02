@@ -119,7 +119,7 @@ export const FileUpload = <T extends string | File = string>({
         }
         onFileSelect(result); 
       } catch (error: unknown) {
-        const fileName = (fileListArray[0] && fileListArray[0].name) ? fileListArray[0].name : 'Unknown File'; // Safely access file.name
+        const fileName = (fileListArray[0] as File).name; // Explicitly cast to File for .name access
         console.error(`Error processing single file ${fileName}:`, error instanceof Error ? error.message : String(error));
       }
     }

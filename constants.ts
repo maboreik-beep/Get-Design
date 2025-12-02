@@ -22,6 +22,10 @@ export const TEMPLATE_CATEGORIES: TemplateCategory[] = [
   'website_design'
 ];
 
+// Placeholder SVG for immediate display for web drafts
+export const GENERIC_WEB_DRAFT_SVG_DATA_URL = `data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iODAwcHgiIGhlaWdodD0iNDUwcHgiIHZpZXdCb3g9IjAgMCA4MDAgNDUwIiB2ZXJzaW9uPSIxLjEiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyIgeG1sbnM6eGxpbms9Imh0dHA6Ly93d3cudzMub3JnLzE5OTkveGxpbmsiPgogICAgPGdzdHJva2U9Im5vbmUiIHN0cm9rZS13aWR0aD0iMSIgZmlsbD0ibm9uZSIgZmlsbC1ydWxlPSJldmVub2RkIj4KICAgICAgICA8cmVjdCBmaWxsPSIjMDYwNjA2IiB4PSIwIiB5PSIwIiB3aWR0aD0iODAwIiBoZWlnaHQ9IjQ1MCI+PC9yZWN0PgogICAgICAgIDxyZWN0IGZpbGw9IiMxRjFGMUYiIHg9IjgwIiB5PSI3NSIgd2lkdGg9IjY0MCIgaGVpZ2h0PSIzMDAiIHJ4PSIxMCI+PC9yZWN0PgogICAgICAgIDxyZWN0IGZpbGw9IiMwQTBBMDBBIiB4PSI4MCIgeT0iMCIgd2lkdGg9IjY0MCIgaGVpZ2h0PSI2MCIgcng9IjEwIj48L3JlY3Q+CiAgICAgICAgPHJlY3QgZmlsbD0iIzFGMUYxRiIgeD0iMTAwIiB5PSIxNSIgd2lkdGg9IjEyMCIgaGVpZ2h0PSIzMCIgcng9IjUiPPC9yZWN0PgogICAgICAgIDxyZWN0IGZpbGw9IiMxRjFGMUYiIHg9IjI0MCIgeT0iMTUiIHdpZHRoPSI3MCIgaGVpZ2h0PSIzMCIgcng9IjUiPPC9yZWN0PgogICAgICAgIDxyZWN0IGZpbGw9IiMxRjFGMUYiIHg9IjMyMCIgeT0iMTUiIHdpZHRoPSI3MCIgaGVpZ2h0PSIzMCIgcng9IjUiPPC9yZWN0PgogICAgICAgIDxyZWN0IGZpbGw9IiMxRjFGMUYiIHg9IjcxMCIgeT0iMTUiIHdpZHRoPSI5MCIgaGVpZ2h0PSIzMCIgcng9IjUiPPC9yZWN0PgogICAgICAgIDxyZWN0IGZpbGw9IiMxRjFGMUYiIHg9IjEwMCIgeT0iMTAwIiB3aWR0aD0iMjUwIiBoZWlnaHQ9IjE1MCIgcng9IjEwIj48L3JlY3Q+CiAgICAgICAgPHJlY3QgZmlsbD0iIzFGMUYxRiIgeD0iMzcwIiB5PSIxMDAiIHdpZHRoPSI1MDAiIGhlaWdodD0iNTAiIHJ4PSIxMCI+PC9yZWN0PgogICAgICAgIDxyZWN0IGZpbGw9IiMxRjFGMUYiIHg9IjM3MCIgeT0iMTYwIiB3aWR0aD0iNTAwIiBoZWlnaHQ9IjI1IiByeD0iMTAiPjwvcmVjdD4KICAgICAgICA8cmVjdCBmaWxsPSIjMEYwRjBGIiB4PSIxMDAiIHk9IjI4MCIgd2lkdGg9IjYwMCIgaGVpZ2h0PSIxNDAiIHJ4PSIxMCI+PC9yZWN0PgogICAgICAgIDxwYXRoIGQ9Ik00MDAgMjA4LjIzMjQyMjlMMzY5Ljk5OTk2OSA0MDguMDk2MTk3IDYwMC45OTk5MTEgNDA4LjA5NjE5NyAzNDkuMjI3NjI4IDIyOS4wNjUyOTcgNjk2LjY2NzMwNiAxMjIuMDI0MzYzIj48L3BhdGg+CiAgICAgICAgPHRleHQgaWQ9IkRyYWZ0LU1vY2t1cC1QZW5kaW5nLUFJLUNvbnRyZWwiIGZvbnQtZmFtaWx5PSJJbnRlciwgU2FuIFNlcmlmIiBmb250LXNpemU9IjMxIiBmb250LXdlaWdodD0iYm9sZCIgZmlsbD0iIzdCQzE0MyI+CiAgICAgICAgICAgIDx0c3BhbiB4PSIyNjciIHk9IjMzMyI+RHJhZnQgTW9ja3VwIC0gUGVuZGluZyBBSQogICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgR2VuZXJhdGlvbgogICAgICAgICAgICA8L3RzcGFuPgogICAgICAgIDwvdGV4dD4KICAgIDwvZz4KPC9zdmc+`;
+
+
 export const TRANSLATIONS: Record<Language, Translation> = {
   en: {
     title: "Get Design AI",
@@ -205,6 +209,8 @@ export const TRANSLATIONS: Record<Language, Translation> = {
     design_status_pending_review_mockup: "Draft (Pending Review)",
     design_status_generating_by_designer: "Generating by Designer",
     design_status_failed: "Failed",
+    design_status_initial_draft_placeholder: "Initial Draft (Placeholder)",
+    design_status_ai_draft_generated: "AI Draft Generated",
   },
   ar: {
     title: "جيت ديزاين AI",
@@ -388,5 +394,7 @@ export const TRANSLATIONS: Record<Language, Translation> = {
     design_status_pending_review_mockup: "مسودة (قيد المراجعة)",
     design_status_generating_by_designer: "يتم التوليد بواسطة المصمم",
     design_status_failed: "فشل",
+    design_status_initial_draft_placeholder: "مسودة أولية (عنصر نائب)",
+    design_status_ai_draft_generated: "تم إنشاء مسودة بواسطة الذكاء الاصطناعي",
   }
 };

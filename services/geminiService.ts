@@ -1,6 +1,7 @@
 
 // services/geminiService.ts
 import { BusinessData, DesignType, GeneratedResult, GeneratedResultStatus } from '../types';
+import { GENERIC_WEB_DRAFT_SVG_DATA_URL } from '../constants'; // Import the new constant
 
 /**
  * Centralized error handler for fetch API responses from backend.
@@ -87,7 +88,7 @@ export async function generateDesign(
     const result: GeneratedResult = await response.json();
     
     if (designType === 'web') {
-      onStatusUpdate("Website design request submitted for designer review (draft generated).");
+      onStatusUpdate("Website design request submitted (draft provided).");
     } else {
       onStatusUpdate("Design complete!");
     }
@@ -153,6 +154,22 @@ export async function triggerWebDesignGeneration(
     clearInterval(statusInterval);
     onStatusUpdate("Error during website generation.");
     console.error("Error triggering web design generation:", error);
+    throw error;
+  }
+}
+
+/**
+ * Fetches the current status and image URL of a generated design.
+ * Used by frontend polling for draft updates.
+ */
+export async function fetchDesignStatus(designId: number): Promise<{imageUrl: string; status: GeneratedResultStatus}> {
+  try {
+    const response = await fetch(`/api/generated-designs/${designId}/status`);
+    await handleBackendResponseError(response);
+    const data = await response.json();
+    return data;
+  } catch (error) {
+    console.error("Error fetching design status:", error);
     throw error;
   }
 }

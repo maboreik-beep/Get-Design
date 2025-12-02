@@ -1,4 +1,3 @@
-
 // server/index.js
 import express from 'express';
 import dotenv from 'dotenv';
@@ -30,8 +29,18 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 // Database setup
-const dbPath = path.join(__dirname, 'database.sqlite');
+// Use a persistent path for SQLite database on Render, e.g., /var/data/database.sqlite
+// If Render Disk is not configured, this will be ephemeral and reset on deploy/restart.
+const PERSISTENT_DATA_DIR = process.env.RENDER_DISK_PATH || path.join(__dirname, '..', 'data'); // Fallback to a 'data' folder at project root for local testing
+if (!fs.existsSync(PERSISTENT_DATA_DIR)) {
+  fs.mkdirSync(PERSISTENT_DATA_DIR, { recursive: true });
+}
+const dbPath = path.join(PERSISTENT_DATA_DIR, 'database.sqlite');
 let db;
+
+// Placeholder SVG for immediate display for web drafts
+const GENERIC_WEB_DRAFT_SVG_DATA_URL = `data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iODAwcHgiIGhlaWdodD0iNDUwcHgiIHZpZXdCb3g9IjAgMCA4MDAgNDUwIiB2ZXJzaW9uPSIxLjEiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyIgeG1sbnM6eGxpbms9Imh0dHA6Ly93d3cudzMub3JnLzE5OTkveGxpbmsiPgogICAgPGdzdHJva2U9Im5vbmUiIHN0cm9rZS13aWR0aD0iMSIgZmlsbD0ibm9uZSIgZmlsbC1ydWxlPSJldmVub2RkIj4KICAgICAgICA8cmVjdCBmaWxsPSIjMDYwNjA2IiB4PSIwIiB5PSIwIiB3aWR0aD0iODAwIiBoZWlnaHQ9IjQ1MCI+PC9yZWN0PgogICAgICAgIDxyZWN0IGZpbGw9IiMxRjFGMUYiIHg9IjgwIiB5PSI3NSIgd2lkdGg9IjY0MCIgaGVpZ2h0PSIzMDAiIHJ4PSIxMCI+PC9yZWN0PgogICAgICAgIDxyZWN0IGZpbGw9IiMwQTBBMDBBIiB4PSI4MCIgeT0iMCIgd2lkdGg9IjY0MCIgaGVpZ2h0PSI2MCIgcng9IjEwIj48L3JlY3Q+CiAgICAgICAgPHJlY3QgZmlsbD0iIzFGMUYxRiIgeD0iMTAwIiB5PSIxNSIgd2lkdGg9IjEyMCIgaGVpZ2h0PSIzMCIgcng9IjUiPPC92ZWN0PgogICAgICAgIDxyZWN0IGZpbGw9IiMxRjFGMUYiIHg9IjI0MCIgeT0iMTUiIHdpZHRoPSI3MCIgaGVpZ2h0PSIzMCIgcng9IjUiPPC9yZWN0PgogICAgICAgIDxyZWN0IGZpbGw9IiMxRjFGMUYiIHg9IjMyMCIgeT0iMTUiIHdpZHRoPSI3MCIgaGVpZ2h0PSIzMCIgcng9IjUiPPC9yZWN0PgogICAgICAgIDxyZWN0IGZpbGw9IiMxRjFGMUYiIHg9IjcxMCIgeT0iMTUiIHdpZHRoPSI5MCIgaGVpZ2h0PSIzMCIgcng9IjUiPPC9yZWN0PgogICAgICAgIDxyZWN0IGZpbGw9IiMxRjFGMUYiIHg9IjEwMCIgeT0iMTAwIiB3aWR0aD0iMjUwIiBoZWlnaHQ9IjE1MCIgcng9IjEwIj48L3JlY3Q+CiAgICAgICAgPHJlY3QgZmlsbD0iIzFGMUYxRiIgeD0iMzcwIiB5PSIxMDAiIHdpZHRoPSI1MDAiIGhlaWdodD0iNTAiIHJ4PSIxMCI+PC9yZWN0PgogICAgICAgIDxyZWN0IGZpbGw9IiMxRjFGMUYiIHg9IjM3MCIgeT0iMTYwIiB3aWR0aD0iNTAwIiBoZWlnaHQ9IjI1IiByeD0iMTAiPjwvcmVjdD4KICAgICAgICA8cmVjdCBmaWxsPSIjMEYwRjBGIiB4PSIxMDAiIHk9IjI4MCIgd2lkdGg9IjYwMCIgaGVpZ2h0PSIxNDAiIHJ4PSIxMCI+PC9yZWN0PgogICAgICAgIDxwYXRoIGQ9Ik00MDAgMjA4LjIzMjQyMjlMMzY5Ljk5OTk2OSA0MDguMDk2MTk3IDYwMC45OTk5MTEgNDA4LjA5NjE5NyAzNDkuMjI3NjI4IDIyOS4wNjUyOTcgNjk2LjY2NzMwNiAxMjIuMDI0MzYzIj48L3BhdGg+CiAgICAgICAgPHRleHQgaWQ9IkRyYWZ0LU1vY2t1cC1QZW5kaW5nLUFJLUNvbnRyZWwiIGZvbnQtZmFtaWx5PSJJbnRlciwgU2FuIFNlcmlmIiBmb250LXNpemU9IjMxIiBmb250LXdlaWdodD0iYm9sZCIgZmlsbD0iIzdCQzE0MyI+CiAgICAgICAgICAgIDx0c3BhbiB4PSIyNjciIHk9IjMzMyI+RHJhZnQgTW9ja3VwIC0gUGVuZGluZyBBSQogICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgR2VuZXJhdGlvbgogICAgICAgICAgICA8L3RzcGFuPgogICAgICAgIDwvdGV4dD4KICAgIDwvZz4KPC9zdmc+`;
+
 
 async function initializeDatabase() {
   db = await open({
@@ -58,8 +67,10 @@ async function initializeDatabase() {
       industry TEXT,
       description TEXT,
       image_url TEXT NOT NULL,
+      images TEXT, -- Store JSON string of image URLs for multi-image designs (web/brochure)
       template_link TEXT,
       conceptual_template_id TEXT, -- New column to store conceptual template ID
+      status TEXT DEFAULT 'ready', -- New: 'ready', 'initial_draft_placeholder', 'ai_draft_generated', 'pending_designer_review', 'generating_by_designer', 'failed'
       created_at TEXT DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (contact_id) REFERENCES Leads(id)
     );
@@ -81,10 +92,10 @@ async function initializeDatabase() {
       design_type TEXT NOT NULL, -- Will primarily be 'web'
       business_data TEXT NOT NULL, -- JSON string of BusinessData
       logo_base64 TEXT, -- Stored if provided (string)
-      brochure_base64 TEXT, -- Stored if provided (JSON string of string[])
-      zip_file_path TEXT, -- Optional: path to the extracted contents if zip was uploaded
+      brochure_base64 TEXT, -- Stored as JSON string of string[]
+      zip_file_path TEXT, -- Optional: path to extracted zip content for re-use
       status TEXT NOT NULL DEFAULT 'pending', -- 'pending', 'generating', 'completed', 'failed', 'cancelled'
-      generated_design_id INTEGER, -- Link to GeneratedDesigns if completed
+      generated_design_id INTEGER, -- Link to GeneratedDesigns (draft or final)
       created_at TEXT DEFAULT CURRENT_TIMESTAMP,
       updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (contact_id) REFERENCES Leads(id),
@@ -289,8 +300,13 @@ transporter.verify(function (error, success) {
 
 
 // Multer setup for file uploads (zip files)
+const UPLOAD_PERSISTENT_DIR = path.join(PERSISTENT_DATA_DIR, 'uploads');
+if (!fs.existsSync(UPLOAD_PERSISTENT_DIR)) {
+  fs.mkdirSync(UPLOAD_PERSISTENT_DIR, { recursive: true });
+}
+
 const upload = multer({
-  dest: os.tmpdir(), // Use OS temporary directory
+  dest: UPLOAD_PERSISTENT_DIR, // Use the persistent upload directory
   limits: {
     fileSize: (parseInt(process.env.ZIP_MAX_SIZE_MB || '10') * 1024 * 1024), // Max 10MB default
   },
@@ -430,11 +446,11 @@ async function performWebDesignGeneration(designTask, contactDetails) {
     throw new Error("Server API Key not configured.");
   }
 
-  const { id: taskId, contact_id, business_data: businessDataJson, logo_base64: logoBase64String, brochure_base664: brochureBase664Json, zip_file_path: zipFilePath } = designTask;
+  const { id: taskId, contact_id, business_data: businessDataJson, logo_base64: logoBase64String, brochure_base64: brochureBase64Json, zip_file_path: zipFilePath } = designTask;
   
   let businessData = JSON.parse(businessDataJson);
   let logoBase64 = logoBase64String;
-  let brochureBase64 = brochureBase664Json ? JSON.parse(brochureBase664Json) : [];
+  let brochureBase64 = brochureBase64Json ? JSON.parse(brochureBase64Json) : [];
   let brochureTextContent = [];
   let brochureImageParts = [];
   let templateLink = "";
@@ -442,13 +458,20 @@ async function performWebDesignGeneration(designTask, contactDetails) {
   // If a zip was used, re-extract content if zipFilePath is available
   if (zipFilePath && fs.existsSync(zipFilePath)) {
     try {
-      const files = await promisify(fs.readdir)(zipFilePath);
+      // Create a temporary extraction directory inside os.tmpdir() for each processing pass
+      const extractionTempDir = path.join(os.tmpdir(), `extract-task-${taskId}-${Date.now()}`);
+      await promisify(fs.mkdir)(extractionTempDir, { recursive: true });
+
+      const zip = new AdmZip(zipFilePath);
+      zip.extractAllTo(extractionTempDir, true);
+
+      const files = await promisify(fs.readdir)(extractionTempDir);
       let descriptionFromZip = '';
       let logoFromZip = '';
       let brochureFromZip = [];
 
       for (const file of files) {
-        const filePath = path.join(zipFilePath, file);
+        const filePath = path.join(extractionTempDir, file);
         const ext = path.extname(file).toLowerCase();
         const fileName = path.basename(file).toLowerCase();
 
@@ -482,6 +505,10 @@ async function performWebDesignGeneration(designTask, contactDetails) {
       if (descriptionFromZip && !businessData.name) {
         businessData.name = `Task ${taskId} Project`;
       }
+
+      // Clean up the temporary extraction directory
+      await promisify(fs.rm)(extractionTempDir, { recursive: true, force: true });
+
     } catch (zipError) {
       console.error(`Error re-processing zip for task ${taskId}:`, zipError);
     }
@@ -715,15 +742,17 @@ async function performWebDesignGeneration(designTask, contactDetails) {
 
   // Save design to database
   const designResult = await db.run(
-    "INSERT INTO GeneratedDesigns (contact_id, design_type, business_name, industry, description, image_url, template_link, conceptual_template_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+    "INSERT INTO GeneratedDesigns (contact_id, design_type, business_name, industry, description, image_url, images, template_link, conceptual_template_id, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
     contact_id, // From DesignTask
     designTask.design_type,
     businessData.name,
     businessData.industry,
     businessData.description,
     mainImageUrl,
+    JSON.stringify(resultImages), // Store all images as JSON array
     selectedTemplate ? selectedTemplate.thumbnail_url : null, // Use thumbnail_url as template_link
-    selectedTemplate ? selectedTemplate.id : null
+    selectedTemplate ? selectedTemplate.id : null,
+    'ready' // Final status for the complete design
   );
 
   return {
@@ -738,7 +767,158 @@ async function performWebDesignGeneration(designTask, contactDetails) {
     type: designTask.design_type,
     data: businessData,
     contactId: contact_id,
+    status: 'ready'
   };
+}
+
+
+// Helper function to handle AI generation for a single draft mockup (used by user route)
+async function performDraftWebDesignGeneration(designTaskData, contactDetails, designIdToUpdate) {
+  if (!ai) {
+    throw new Error("Server API Key not configured.");
+  }
+
+  const { contact_id, business_data: businessDataJson, logo_base64: logoBase64String, brochure_base64: brochureBase64Json } = designTaskData;
+  
+  let businessData = JSON.parse(businessDataJson);
+  let logoBase64 = logoBase64String;
+  let brochureBase64 = brochureBase64Json ? JSON.parse(brochureBase64Json) : [];
+  let brochureTextContent = [];
+  let brochureImageParts = [];
+
+  // Process brochureBase64
+  const brochureFiles = Array.isArray(brochureBase64) ? brochureBase64 : (brochureBase64 ? [brochureBase64] : []);
+
+  for (const dataUrl of brochureFiles) {
+    const parsed = parseDataUrl(dataUrl);
+    if (parsed) {
+      const { mimeType, data } = parsed;
+      if (mimeType.startsWith('image/')) {
+        brochureImageParts.push({ inlineData: { mimeType, data } });
+      } else if (mimeType === 'application/pdf') {
+        try {
+          const buffer = Buffer.from(data, 'base64');
+          const pdfData = await pdfParse(buffer);
+          brochureTextContent.push(pdfData.text);
+        } catch (pdfError) {
+          console.error("Error parsing PDF for draft:", pdfError);
+        }
+      } else if (mimeType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
+        try {
+          const buffer = Buffer.from(data, 'base64');
+          const result = await mammoth.extractRawText({ buffer: buffer });
+          brochureTextContent.push(result.value);
+        } catch (docxError) {
+          console.error("Error parsing DOCX for draft:", docxError);
+        }
+      }
+    }
+  }
+
+  // --- Template Selection & Dynamic Content Generation (lightweight for draft) ---
+  const selectedTemplate = await selectTemplate(designTaskData.design_type, businessData.industry, businessData.visualStyle);
+  let templateGuidancePrompt = '';
+  let generatedHeadline = businessData.name;
+  let generatedBody = businessData.description;
+  let generatedCta = 'View Details';
+
+  if (selectedTemplate) {
+    templateGuidancePrompt = `
+      DESIGN CONCEPT: Provide a very basic, single-page homepage mockup. Focus on the core layout and branding.
+      TEMPLATE HINT: "${selectedTemplate.prompt_hint}"
+    `;
+    const templateGeneratedContent = JSON.parse(selectedTemplate.generated_content_examples || '{}');
+    generatedHeadline = templateGeneratedContent.headline || generatedHeadline;
+    generatedBody = templateGeneratedContent.body || generatedBody;
+    generatedCta = templateGeneratedContent.cta || generatedCta;
+  }
+  
+  // --- Gemini Prompt Construction for Draft ---
+  const finalGeminiParts = [];
+
+  // Add selected template's thumbnail image as visual reference IF AVAILABLE
+  if (selectedTemplate && selectedTemplate.thumbnail_url && selectedTemplate.thumbnail_url.trim() !== '') {
+    try {
+      const imageResponse = await fetch(selectedTemplate.thumbnail_url);
+      if (!imageResponse.ok) {
+        throw new Error(`Failed to fetch template thumbnail from ${selectedTemplate.thumbnail_url}: ${imageResponse.statusText}`);
+      }
+      const imageBuffer = await imageResponse.arrayBuffer();
+      const base64Image = Buffer.from(imageBuffer).toString('base64');
+      const contentType = imageResponse.headers.get('content-type') || 'image/jpeg';
+      finalGeminiParts.push({ inlineData: { mimeType: contentType, data: base64Image } });
+    } catch (imgFetchError) {
+      console.warn(`Could not fetch or process template thumbnail for draft:`, imgFetchError);
+    }
+  }
+
+  finalGeminiParts.push({
+    text: `
+    ${templateGuidancePrompt || ''}
+    
+    BRANDING INTEGRATION:
+    - Business Name: "${businessData.name}" (Render legibly. DO NOT add "Get Design" text).
+    - Description Context: "${businessData.description}".
+    
+    ${brochureTextContent.length > 0 ? `\nADDITIONAL CONTENT CONTEXT FROM DOCUMENTS (Extract key themes):\n${brochureTextContent.join('\n\n')}\n` : ''}
+
+    TEXTUAL CONTENT FOR DRAFT:
+    - PRIMARY HEADLINE: "${generatedHeadline}"
+    - BODY TEXT (very brief): "${generatedBody.substring(0, 100)}..."
+    - CALL TO ACTION: "${generatedCta}"
+
+    DESIGN PRINCIPLES: Generate a *single image* representing a clean, professional, and responsive **homepage draft** mockup. Use the provided branding and content. Prioritize clear layout and visual hierarchy. This is a quick draft.
+    
+    STRICT CONSTRAINT: The design must look ABSOLUTELY FINISHED, production-ready, and already EXISTS as a physical or digital product. NO sketches, NO blurry text, NO placeholder indicators.
+    `
+  });
+
+  if (logoBase64) {
+    const parsedLogo = parseDataUrl(logoBase64);
+    if (parsedLogo) {
+      finalGeminiParts.push({ inlineData: { mimeType: parsedLogo.mimeType, data: parsedLogo.data } });
+    }
+  }
+  brochureImageParts.forEach(part => finalGeminiParts.push(part));
+
+
+  // Perform AI call for a single draft image
+  const response = await ai.models.generateContent({
+    model: 'gemini-2.5-flash-image', 
+    contents: {
+      parts: finalGeminiParts
+    },
+    config: {
+      imageConfig: {
+        aspectRatio: "16:9", // Standard aspect ratio for web page
+      }
+    }
+  });
+
+  const candidate = response.candidates?.[0];
+  let draftImageUrl = null;
+  if (candidate?.content?.parts) {
+    for (const part of candidate.content.parts) {
+      if (part.inlineData) {
+        draftImageUrl = `data:image/png;base64,${part.inlineData.data}`;
+        break;
+      }
+    }
+  }
+
+  if (draftImageUrl) {
+    await db.run(
+      "UPDATE GeneratedDesigns SET image_url = ?, status = ? WHERE id = ?",
+      draftImageUrl, 'ai_draft_generated', designIdToUpdate
+    );
+    console.log(`AI Draft generated and updated for design ${designIdToUpdate}`);
+  } else {
+    console.error(`AI model did not return an image for draft design ${designIdToUpdate}.`);
+    await db.run(
+      "UPDATE GeneratedDesigns SET status = ? WHERE id = ?",
+      'failed', designIdToUpdate
+    );
+  }
 }
 
 
@@ -848,7 +1028,7 @@ app.get('/api/admin/leads/export', authenticateAdmin, async (req, res) => {
 app.get('/api/admin/designs', authenticateAdmin, async (req, res) => {
   const { email, phone } = req.query;
   let query = `
-    SELECT gd.id, gd.design_type, gd.business_name, gd.industry, gd.description, gd.image_url, gd.template_link, gd.conceptual_template_id, gd.created_at,
+    SELECT gd.id, gd.design_type, gd.business_name, gd.industry, gd.description, gd.image_url, gd.images, gd.template_link, gd.conceptual_template_id, gd.status, gd.created_at,
            l.email AS contact_email, l.phone AS contact_phone
     FROM GeneratedDesigns gd
     LEFT JOIN Leads l ON gd.contact_id = l.id
@@ -872,7 +1052,12 @@ app.get('/api/admin/designs', authenticateAdmin, async (req, res) => {
 
   try {
     const designs = await db.all(query, ...params);
-    res.json(designs);
+    // Parse the images JSON string back to an array for the frontend
+    const parsedDesigns = designs.map(d => ({
+      ...d,
+      images: d.images ? JSON.parse(d.images) : null
+    }));
+    res.json(parsedDesigns);
   } catch (err) {
     console.error("Database error fetching designs:", err);
     res.status(500).json({ error: "Failed to fetch designs." });
@@ -883,7 +1068,7 @@ app.get('/api/admin/designs', authenticateAdmin, async (req, res) => {
 app.get('/api/admin/designs/export', authenticateAdmin, async (req, res) => {
   try {
     const designs = await db.all(`
-      SELECT gd.id, gd.design_type, gd.business_name, gd.industry, gd.description, gd.image_url, gd.template_link, gd.conceptual_template_id, gd.created_at,
+      SELECT gd.id, gd.design_type, gd.business_name, gd.industry, gd.description, gd.image_url, gd.template_link, gd.conceptual_template_id, gd.status, gd.created_at,
              l.name AS contact_name, l.company AS contact_company, l.email AS contact_email, l.phone AS contact_phone
       FROM GeneratedDesigns gd
       LEFT JOIN Leads l ON gd.contact_id = l.id
@@ -902,6 +1087,7 @@ app.get('/api/admin/designs/export', authenticateAdmin, async (req, res) => {
       { header: 'Image URL', key: 'image_url', width: 60 },
       { header: 'Template Link', key: 'template_link', width: 40 },
       { header: 'Conceptual Template ID', key: 'conceptual_template_id', width: 30 },
+      { header: 'Status', key: 'status', width: 20 },
       { header: 'Created At', key: 'created_at', width: 25 },
       { header: 'Contact Name', key: 'contact_name', width: 30 },
       { header: 'Contact Company', key: 'contact_company', width: 30 },
@@ -1042,71 +1228,115 @@ app.post('/api/design-tasks', upload.single('zipFile'), async (req, res) => {
 
 
   let zipFilePath = null;
-  const tempDir = path.join(os.tmpdir(), `upload-${Date.now()}`); // Temp dir for zip extraction
+  let initialGeneratedDesignId = null;
 
   try {
     if (req.file) {
-      await promisify(fs.mkdir)(tempDir, { recursive: true });
-      const zip = new AdmZip(req.file.path);
-      zip.extractAllTo(tempDir, true);
-      zipFilePath = tempDir; // Store path to extracted contents for later use
+      const originalPath = req.file.path;
+      const newFileName = `zip_task_${Date.now()}_${req.file.originalname}`;
+      zipFilePath = path.join(UPLOAD_PERSISTENT_DIR, newFileName); // Store in persistent upload directory
+      
+      await promisify(fs.rename)(originalPath, zipFilePath); // Move from Multer's temp to persistent storage
+      console.log(`Zip file moved to persistent storage: ${zipFilePath}`);
     }
-    
-    // Create the Design Task
-    const result = await db.run(
-      `INSERT INTO DesignTasks (contact_id, design_type, business_data, logo_base64, brochure_base64, zip_file_path, status) 
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+
+    // Create an initial placeholder entry in GeneratedDesigns for the draft
+    const placeholderDesign = await db.run(
+      "INSERT INTO GeneratedDesigns (contact_id, design_type, business_name, industry, description, image_url, status) VALUES (?, ?, ?, ?, ?, ?, ?)",
+      businessData.contactId,
+      type,
+      businessData.name || 'Untitled Web Project', // Use business name or default
+      businessData.industry,
+      businessData.description,
+      GENERIC_WEB_DRAFT_SVG_DATA_URL, // Placeholder image
+      'initial_draft_placeholder' // Initial status
+    );
+    initialGeneratedDesignId = placeholderDesign.lastID;
+
+    // Create the DesignTask entry
+    const taskResult = await db.run(
+      "INSERT INTO DesignTasks (contact_id, design_type, business_data, logo_base64, brochure_base64, zip_file_path, status, generated_design_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
       businessData.contactId,
       type,
       JSON.stringify(businessData),
-      logoBase64 || null,
+      logoBase64,
       JSON.stringify(brochureBase64),
-      zipFilePath,
-      'pending'
+      zipFilePath, // Store the persistent path
+      'pending', // Initial status for designer review
+      initialGeneratedDesignId
     );
 
-    res.status(201).json({
-      id: `task-${result.lastID}`,
-      designTaskId: result.lastID,
-      status: 'pending_designer_review', // Indicate draft is pending review
+    // After creating the task, immediately trigger the draft generation asynchronously
+    // We don't await this so the user gets a quick response.
+    const contactDetails = await db.get("SELECT * FROM Leads WHERE id = ?", businessData.contactId);
+    performDraftWebDesignGeneration(
+      { ...businessData, contact_id: businessData.contactId, business_data: JSON.stringify(businessData), logo_base64: logoBase64, brochure_base64: JSON.stringify(brochureBase64) },
+      contactDetails,
+      initialGeneratedDesignId
+    ).catch(err => console.error("Async draft generation failed:", err));
+
+
+    res.status(202).json({ 
+      id: initialGeneratedDesignId.toString(), // Return the ID of the placeholder design
+      designTaskId: taskResult.lastID, // Return the task ID as well
+      imageUrl: GENERIC_WEB_DRAFT_SVG_DATA_URL,
+      status: 'initial_draft_placeholder',
       type: type,
-      imageUrl: '/assets/pending-web-design.svg', // Placeholder image
-      timestamp: Date.now(),
       data: businessData,
       contactId: businessData.contactId,
+      timestamp: Date.now(),
+      message: "Web design task submitted for review. A draft will be generated shortly." 
     });
 
-  } catch (error) {
-    console.error('API call failed on server:', error);
-    if (req.file) {
-      try { await promisify(fs.unlink)(req.file.path); } catch (e) { console.error("Error cleaning up uploaded file:", e); }
-    }
-    if (zipFilePath && fs.existsSync(zipFilePath)) { // Clean up extracted dir on error
-      try { await promisify(fs.rm)(zipFilePath, { recursive: true, force: true }); } catch (e) { console.error("Error cleaning up temp zip directory:", e); }
-    }
-    const errorMessage = handleGeminiError(error);
-    res.status(500).json({ error: errorMessage || "Failed to create design task on the server." });
+  } catch (err) {
+    console.error("Error creating design task:", err);
+    res.status(500).json({ error: `Failed to create design task: ${handleGeminiError(err)}` });
   } finally {
-    if (req.file) { // Clean up uploaded zip file
-      try { await promisify(fs.unlink)(req.file.path); } catch (e) { console.error("Error cleaning up uploaded zip file:", e); }
+    // Multer creates files in dest. If something goes wrong before moving, clean up.
+    if (req.file && fs.existsSync(req.file.path) && req.file.path !== zipFilePath) {
+      try {
+        await promisify(fs.unlink)(req.file.path);
+      } catch (err) {
+        console.error("Failed to delete temp multer file:", err);
+      }
     }
   }
 });
 
+// NEW: Endpoint to get design status (for frontend polling of drafts)
+app.get('/api/generated-designs/:id/status', async (req, res) => {
+  const designId = req.params.id;
+  try {
+    const design = await db.get("SELECT image_url, status FROM GeneratedDesigns WHERE id = ?", designId);
+    if (!design) {
+      return res.status(404).json({ error: "Design not found." });
+    }
+    res.json({ imageUrl: design.image_url, status: design.status });
+  } catch (err) {
+    console.error("Error fetching design status:", err);
+    res.status(500).json({ error: "Failed to fetch design status." });
+  }
+});
 
-// NEW: Admin API to get all Design Tasks
+
+// NEW: Admin API to get all design tasks
 app.get('/api/admin/design-tasks', authenticateAdmin, async (req, res) => {
-  const { status } = req.query;
+  const { status } = req.query; // Filter by status (e.g., 'pending', 'generating', 'completed')
   let query = `
     SELECT dt.*, l.name AS contact_name, l.email AS contact_email, l.phone AS contact_phone
     FROM DesignTasks dt
-    LEFT JOIN Leads l ON dt.contact_id = l.id
+    JOIN Leads l ON dt.contact_id = l.id
   `;
   const params = [];
+  const conditions = [];
 
   if (status && status !== 'all') {
-    query += " WHERE dt.status = ?";
+    conditions.push("dt.status = ?");
     params.push(status);
+  }
+
+  if (conditions.length > 0) {
+    query += " WHERE " + conditions.join(" AND ");
   }
   query += " ORDER BY dt.created_at DESC";
 
@@ -1119,242 +1349,54 @@ app.get('/api/admin/design-tasks', authenticateAdmin, async (req, res) => {
   }
 });
 
-// NEW: Admin API to trigger AI generation for a specific Design Task
-app.post('/api/admin/design-tasks/:taskId/generate', authenticateAdmin, async (req, res) => {
-  const taskId = req.params.taskId;
+// NEW: Admin API to trigger AI generation for a specific web design task
+app.post('/api/admin/design-tasks/:id/generate', authenticateAdmin, async (req, res) => {
+  const taskId = req.params.id;
 
-  // Respond immediately to the client that generation has started
-  res.status(202).json({ status: 'generating', message: 'AI generation started in background.' });
-
-  // Execute AI generation in the background
-  (async () => {
-    let designTask;
-    let contactDetails;
-    try {
-      designTask = await db.get("SELECT * FROM DesignTasks WHERE id = ?", taskId);
-      if (!designTask) {
-        console.error(`Background task failed: Design task ${taskId} not found.`);
-        return;
-      }
-      if (designTask.status === 'generating') { // Prevent re-triggering if already generating
-        console.warn(`Background task for ${taskId} is already generating.`);
-        return;
-      }
-      
-      // Update status to generating
-      await db.run("UPDATE DesignTasks SET status = 'generating', updated_at = CURRENT_TIMESTAMP WHERE id = ?", taskId);
-      
-      // Get contact details for email notification
-      contactDetails = await db.get("SELECT email, name FROM Leads WHERE id = ?", designTask.contact_id);
-
-      // Perform the actual AI generation for the web design
-      const generatedDesign = await performWebDesignGeneration(designTask, contactDetails);
-
-      // Update DesignTask with completed status and link to generated design
-      await db.run(
-        "UPDATE DesignTasks SET status = 'completed', generated_design_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
-        generatedDesign.id, taskId
-      );
-
-      // Send email to user that design is ready
-      if (contactDetails && contactDetails.email) {
-        const designLink = `${process.env.PUBLIC_APP_URL || 'https://www.getdesign.cloud'}#result-${generatedDesign.id}`;
-        const mailOptions = {
-          from: process.env.SENDER_EMAIL,
-          to: contactDetails.email,
-          subject: `Your Website Design is Ready from Get Design AI!`,
-          html: `
-            <p>Dear ${contactDetails.name || 'User'},</p>
-            <p>Great news! Your website design concept for "${JSON.parse(designTask.business_data).name}" has been generated and is ready for your review.</p>
-            <p>You can view your design here: <a href="${designLink}">${designLink}</a></p>
-            <img src="${generatedDesign.imageUrl}" alt="Your Website Design" style="max-width: 100%; height: auto; margin: 20px 0;">
-            <p>Best regards,</p>
-            <p>The Get Design AI Team</p>
-          `,
-          attachments: [{
-            filename: `${JSON.parse(designTask.business_data).name}_website_design.png`,
-            path: generatedDesign.imageUrl.startsWith('data:image') ? Buffer.from(generatedDesign.imageUrl.split(',')[1], 'base64') : generatedDesign.imageUrl,
-            cid: 'unique@getdesign.cloud'
-          }]
-        };
-        try {
-          await transporter.sendMail(mailOptions);
-          console.log("Website design ready email sent to:", contactDetails.email);
-        } catch (mailError) {
-          console.error("Failed to send website ready email for task:", taskId, mailError);
-        }
-      }
-
-    } catch (error) {
-      console.error(`Background generation task ${taskId} failed:`, error);
-      await db.run("UPDATE DesignTasks SET status = 'failed', updated_at = CURRENT_TIMESTAMP WHERE id = ?", taskId); // Mark as failed
-      // No response can be sent to client from here, as client already received 202.
-    } finally {
-      // Clean up temporary zip extraction directory if it exists and was created for this task
-      const task = await db.get("SELECT zip_file_path FROM DesignTasks WHERE id = ?", taskId);
-      if (task?.zip_file_path && fs.existsSync(task.zip_file_path)) {
-        try { await promisify(fs.rm)(task.zip_file_path, { recursive: true, force: true }); } catch (e) { console.error("Error cleaning up task's temp zip directory:", e); }
-      }
+  try {
+    const designTask = await db.get("SELECT * FROM DesignTasks WHERE id = ?", taskId);
+    if (!designTask) {
+      return res.status(404).json({ error: "Design task not found." });
     }
-  })();
+    if (designTask.status === 'completed' || designTask.status === 'generating') {
+      return res.status(400).json({ error: "Design task is already completed or currently generating." });
+    }
+
+    // Update task status to 'generating'
+    await db.run("UPDATE DesignTasks SET status = 'generating', updated_at = CURRENT_TIMESTAMP WHERE id = ?", taskId);
+    
+    // Fetch contact details for the generation function
+    const contactDetails = await db.get("SELECT * FROM Leads WHERE id = ?", designTask.contact_id);
+
+    // Perform AI generation
+    const generatedDesign = await performWebDesignGeneration(designTask, contactDetails);
+
+    // Update task status to 'completed' and link generated_design_id
+    await db.run(
+      "UPDATE DesignTasks SET status = 'completed', generated_design_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+      generatedDesign.id, taskId
+    );
+
+    res.json({ message: "AI generation completed and task updated.", result: generatedDesign });
+
+  } catch (err) {
+    console.error(`Error triggering AI generation for task ${taskId}:`, err);
+    // Update task status to 'failed' on error
+    await db.run("UPDATE DesignTasks SET status = 'failed', updated_at = CURRENT_TIMESTAMP WHERE id = ?", taskId);
+    res.status(500).json({ error: `AI generation failed: ${handleGeminiError(err)}` });
+  }
 });
 
 
-// API Endpoint for general design generation (now also handles web via task creation)
-app.post('/api/generate-design', upload.single('zipFile'), async (req, res) => {
-  if (!ai) {
-    return res.status(500).json({ error: "Server API Key not configured. Please contact support." });
-  }
+// Serve static files for the React frontend
+app.use(express.static(path.join(__dirname, '../dist')));
 
-  let { type, businessData, logoBase64 } = req.body;
-  
-  // businessData comes as string from FormData, parse it
-  if (typeof businessData === 'string') {
-    businessData = JSON.parse(businessData);
-  }
+// For any other route, serve the React app (index.html)
+app.get('*', (req, res) => {
+  res.sendFile(path.join(__dirname, '../dist/index.html'));
+});
 
-  // Extract brochureBase64 from parsed businessData if present
-  let brochureBase64 = businessData.brochureBase64;
-  if (typeof brochureBase64 === 'string') brochureBase64 = [brochureBase64];
-  if (!brochureBase64) brochureBase64 = [];
-
-
-  let descriptionFromZip = ''; // To store description extracted from zip
-  let logoFromZip = ''; // To store logo extracted from zip
-  let brochureFromZip = []; // To store brochure extracted from zip
-
-  const tempDir = path.join(os.tmpdir(), `upload-${Date.now()}`); // Temp dir for zip extraction
-  let zipFileCreated = false;
-
-  try {
-    if (req.file) { // If a zip file was uploaded
-      console.log('Zip file received:', req.file.originalname);
-      await promisify(fs.mkdir)(tempDir, { recursive: true }); // Create temp dir
-      zipFileCreated = true;
-
-      const zip = new AdmZip(req.file.path);
-      zip.extractAllTo(tempDir, true);
-      console.log('Zip extracted to:', tempDir);
-
-      const files = await promisify(fs.readdir)(tempDir);
-      for (const file of files) {
-        const filePath = path.join(tempDir, file);
-        const ext = path.extname(file).toLowerCase();
-        const fileName = path.basename(file).toLowerCase();
-
-        if (['.png', '.jpg', '.jpeg', '.webp'].includes(ext)) {
-          const fileBase64 = fs.readFileSync(filePath, { encoding: 'base64' });
-          if (fileName.includes('logo') && !logoFromZip) {
-            logoFromZip = `data:image/${ext.substring(1)};base64,${fileBase64}`;
-          } else if (fileName.includes('brochure') && !brochureFromZip.length) {
-            brochureFromZip.push(`data:image/${ext.substring(1)};base64,${fileBase64}`);
-          }
-          // If no specific name, just take the first image found as a generic asset
-          if (!logoFromZip && !brochureFromZip.length) {
-            logoFromZip = `data:image/${ext.substring(1)};base64,${fileBase64}`; // Fallback: use first image as logo
-          }
-        } else if (['.txt', '.md'].includes(ext)) {
-          const fileContent = fs.readFileSync(filePath, 'utf8');
-          if (fileName.includes('description') || fileName.includes('brief')) {
-            descriptionFromZip += fileContent + '\n';
-          }
-        } else if (['.pdf'].includes(ext)) {
-          const fileBase64 = fs.readFileSync(filePath, { encoding: 'base64' });
-          if (fileName.includes('brochure')) {
-            brochureFromZip.push(`data:application/pdf;base64,${fileBase64}`);
-          }
-        } else if (['.docx'].includes(ext)) {
-          const fileBase64 = fs.readFileSync(filePath, { encoding: 'base64' });
-          if (fileName.includes('brochure')) {
-            brochureFromZip.push(`data:application/vnd.openxmlformats-officedocument.wordprocessingml.document;base64,${fileBase64}`);
-          }
-        }
-      }
-      // Prioritize zip-extracted content over form-based uploads for images
-      logoBase64 = logoFromZip || logoBase64;
-      brochureBase64 = brochureFromZip.length > 0 ? brochureFromZip : (brochureBase64 || []); // Treat as array from zip
-
-      // Augment or replace description
-      businessData.description = descriptionFromZip || businessData.description;
-      if (descriptionFromZip && !businessData.name) {
-        businessData.name = req.file.originalname.replace('.zip', '') || 'Zip Project';
-      }
-
-    } else {
-      console.log('No zip file uploaded, using form data.');
-    }
-
-    // --- Process brochureBase64 (can be string or string[]) ---
-    const brochureTextContent = [];
-    const brochureImageParts = [];
-
-    const brochureFiles = Array.isArray(brochureBase64) ? brochureBase64 : (brochureBase64 ? [brochureBase64] : []);
-
-    for (const dataUrl of brochureFiles) {
-      const parsed = parseDataUrl(dataUrl);
-      if (parsed) {
-        const { mimeType, data } = parsed;
-        if (mimeType.startsWith('image/')) {
-          brochureImageParts.push({ inlineData: { mimeType, data } });
-        } else if (mimeType === 'application/pdf') {
-          try {
-            const buffer = Buffer.from(data, 'base64');
-            const pdfData = await pdfParse(buffer);
-            brochureTextContent.push(pdfData.text);
-          } catch (pdfError) {
-            console.error("Error parsing PDF:", pdfError);
-          }
-        } else if (mimeType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
-          try {
-            const buffer = Buffer.from(data, 'base64');
-            const result = await mammoth.extractRawText({ buffer: buffer });
-            brochureTextContent.push(result.value);
-          } catch (docxError) {
-            console.error("Error parsing DOCX:", docxError);
-          }
-        } else {
-          console.warn("Unsupported brochure file type:", mimeType);
-        }
-      }
-    }
-
-    // --- Template Selection & Dynamic Content Generation ---
-    const selectedTemplate = await selectTemplate(type, businessData.industry, businessData.visualStyle);
-    let templateGuidancePrompt = '';
-    let generatedHeadline = businessData.name; // Default to business name
-    let generatedBody = businessData.description; // Default to description
-    let generatedCta = 'Learn More'; // Default CTA
-
-    // Aspect ratio for image generation (default for single images)
-    let aspectRatio = "1:1"; // Default to square
-    if (type === 'logo') aspectRatio = "1:1";
-    if (type === 'social') {
-      if (businessData.socialPlatform === 'instagram') aspectRatio = "1:1";
-      if (businessData.socialPlatform === 'facebook') aspectRatio = "16:9";
-      if (businessData.socialPlatform === 'linkedin') aspectRatio = "4:1"; // LinkedIn banner typically wide
-    }
-    if (type === 'identity') aspectRatio = "4:3"; // Good for a flat-lay overview
-
-
-    if (businessData.postContent) {
-      generatedHeadline = businessData.postContent.split('\n')[0] || generatedHeadline;
-      generatedBody = businessData.postContent.split('\n').slice(1).join(' ') || generatedBody;
-      // CTA remains default or can be derived if a specific pattern is expected in postContent
-    } else if (selectedTemplate) {
-      // Dynamic template guidance based on whether a thumbnailUrl is available
-      if (selectedTemplate.thumbnail_url && selectedTemplate.thumbnail_url.trim() !== '') {
-        templateGuidancePrompt = `
-          VISUAL TEMPLATE REFERENCE: An image part is provided. This image represents a template.
-          Your task is to:
-          1. Analyze its layout, composition, color scheme, typography, and overall aesthetic.
-          2. Create a *new design* for the current business that *adopts and adapts* the core visual style of the provided template.
-          3. DO NOT generate an identical copy. Evolve the style to fit the new context.
-          4. Ensure the new design reflects the business name, industry, and project details provided.
-          5. Replace any generic stock imagery from the template with relevant imagery for the new business.
-          6. Use the provided textual content (headline, body, CTA) within the design, fitting it into the adapted template structure.
-          
-          The following text provides further nuance about the template's original concept: "${selectedTemplate.prompt_hint}"
-        `;
-      } else {
-        templateGuidancePrompt = `
-          DESIGN CONCEPT: Base the overall layout, composition
+// Start the server
+app.listen(port, () => {
+  console.log(`Server listening on port ${port}`);
+});

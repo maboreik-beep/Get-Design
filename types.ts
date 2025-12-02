@@ -53,7 +53,7 @@ export interface BusinessData {
   brochureBase64?: string | string[] | null; // Updated to support array of base64 strings
 }
 
-export type GeneratedResultStatus = 'ready' | 'pending_designer_review' | 'generating_by_designer' | 'failed'; // For web designs
+export type GeneratedResultStatus = 'initial_draft_placeholder' | 'ai_draft_generated' | 'pending_designer_review' | 'generating_by_designer' | 'ready' | 'failed'; // For web designs
 
 export interface GeneratedResult {
   id: string; // Client-side generated ID (or DB ID)

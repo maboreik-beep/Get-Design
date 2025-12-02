@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react'; // Import useRef
 import { 
   DesignType, 
   BusinessData, 
@@ -10,8 +10,8 @@ import {
   InputMode, // New InputMode type
   GeneratedResultStatus, // New
 } from './types';
-import { TRANSLATIONS, WEBSITE_PAGES, SUPPORT_NUMBER } from './constants'; // Removed GOOGLE_SCRIPT_URL
-import { generateDesign } from './services/geminiService'; // Fix: Now correctly importing named export
+import { TRANSLATIONS, WEBSITE_PAGES, SUPPORT_NUMBER, GENERIC_WEB_DRAFT_SVG_DATA_URL } from './constants'; // Import GENERIC_WEB_DRAFT_SVG_DATA_URL
+import { generateDesign, fetchDesignStatus } from './services/geminiService'; // Fix: Now correctly importing named export
 import { Logo } from './components/Logo';
 import { FileUpload } from './components/FileUpload';
 import { AdminDashboard } from './components/AdminDashboard';
@@ -80,6 +80,10 @@ function App() {
   // UI State
   const [error, setError] = useState<string | null>(null);
 
+  // Polling ref for web draft updates
+  const draftPollingIntervalRef = useRef<number | null>(null);
+
+
   // --- Effects ---
   useEffect(() => {
     // Load history and contact details
@@ -127,6 +131,47 @@ function App() {
       window.removeEventListener('hashchange', handleHashChange);
     };
   }, [history]); // Re-run if history changes to ensure deep links work with new items
+
+  // Effect for polling web drafts to update `My Creations` and current `generatedResult`
+  useEffect(() => {
+    if (draftPollingIntervalRef.current) {
+      clearInterval(draftPollingIntervalRef.current);
+    }
+
+    const webPendingDrafts = history.filter(item => 
+      item.type === 'web' && 
+      (item.status === 'initial_draft_placeholder' || item.status === 'ai_draft_generated')
+    );
+
+    if (webPendingDrafts.length > 0) {
+      draftPollingIntervalRef.current = setInterval(async () => {
+        for (const draft of webPendingDrafts) {
+          if (draft.designTaskId && (draft.status === 'initial_draft_placeholder' || draft.status === 'ai_draft_generated')) {
+            try {
+              const { imageUrl, status } = await fetchDesignStatus(draft.id as unknown as number); // designId is actually GeneratedDesigns ID
+              if (status !== draft.status || imageUrl !== draft.imageUrl) {
+                setHistory(prevHistory => prevHistory.map(item => 
+                  item.id === draft.id ? { ...item, imageUrl, status } : item
+                ));
+                // If the current result is this draft, update it too
+                if (generatedResult?.id === draft.id) {
+                  setGeneratedResult(prev => prev ? { ...prev, imageUrl, status } : null);
+                }
+              }
+            } catch (err) {
+              console.error(`Failed to poll status for design ${draft.id}:`, err);
+            }
+          }
+        }
+      }, 15000) as unknown as number; // Poll every 15 seconds
+    }
+
+    return () => {
+      if (draftPollingIntervalRef.current !== null) {
+        clearInterval(draftPollingIntervalRef.current);
+      }
+    };
+  }, [history, generatedResult]); // Re-run effect if history or current result changes
 
 
   // Determine if form fields (for manual input) should be disabled
@@ -336,7 +381,7 @@ function App() {
   // --- Branding & Image Utilities ---
   const createBrandedImageBlob = async (imageUrl: string): Promise<Blob | null> => {
     // For pending web designs, don't try to create a branded image from a placeholder
-    if (imageUrl.startsWith('/assets/pending-web-design.svg') || imageUrl === '') {
+    if (imageUrl === GENERIC_WEB_DRAFT_SVG_DATA_URL || imageUrl === '') { // Use the constant
       return null;
     }
 
@@ -404,10 +449,10 @@ function App() {
     const contact = contactDetails;
     let message = "";
 
-    if (!result.imageUrl || result.status === 'pending_designer_review' || result.status === 'generating_by_designer') {
+    if (!result.imageUrl || result.status !== 'ready') { // Only allow if status is 'ready'
       alert(lang === 'en' 
-        ? "This design is still pending final generation or review by a designer. Please wait for it to be ready before requesting files."
-        : "تصميم هذا الموقع لا يزال قيد المراجعة النهائية من قبل المصمم. يرجى الانتظار حتى يصبح جاهزًا قبل طلب الملفات.");
+        ? "This design is not yet ready. Please wait for the final generation."
+        : "هذا التصميم ليس جاهزًا بعد. يرجى الانتظار حتى يكتمل التوليد النهائي.");
       return;
     }
 
@@ -453,10 +498,10 @@ function App() {
   };
 
   const handleShare = async (result: GeneratedResult) => {
-    if (!result.imageUrl || result.status === 'pending_designer_review' || result.status === 'generating_by_designer') {
+    if (!result.imageUrl || result.status !== 'ready') { // Only allow if status is 'ready'
       alert(lang === 'en' 
-        ? "This design is still pending final generation or review by a designer. Please wait for it to be ready before sharing."
-        : "تصميم هذا الموقع لا يزال قيد المراجعة النهائية من قبل المصمم. يرجى الانتظار حتى يصبح جاهزًا قبل المشاركة.");
+        ? "This design is not yet ready. Please wait for the final generation before sharing."
+        : "هذا التصميم ليس جاهزًا بعد. يرجى الانتظار حتى يكتمل التوليد النهائي قبل المشاركة.");
       return;
     }
 
@@ -500,10 +545,10 @@ function App() {
   };
 
   const handleDownload = async (imageUrl: string, filename: string) => {
-    if (imageUrl.startsWith('/assets/pending-web-design.svg') || imageUrl === '' || imageUrl.includes('pending-web-design.svg')) {
+    if (imageUrl === GENERIC_WEB_DRAFT_SVG_DATA_URL || imageUrl === '' || generatedResult?.status !== 'ready') { // Use constant and check status
       alert(lang === 'en' 
-        ? "This design is still pending final generation or review by a designer. Please wait for it to be ready before downloading."
-        : "تصميم هذا الموقع لا يزال قيد المراجعة النهائية من قبل المصمم. يرجى الانتظار حتى يصبح جاهزًا قبل التنزيل.");
+        ? "This design is not yet ready for download. Please wait for the final generation."
+        : "هذا التصميم ليس جاهزًا للتحميل بعد. يرجى الانتظار حتى يكتمل التوليد النهائي.");
       return;
     }
 
@@ -1007,7 +1052,11 @@ function App() {
               </div>
             </div>
             {/* Detailed Status Text */}
-            <h2 className="text-2xl font-bold text-center animate-pulse mb-2">{designType === 'web' ? t.task_status_pending : t.generating}</h2>
+            <h2 className="text-2xl font-bold text-center animate-pulse mb-2">
+              {generatedResult?.status === 'initial_draft_placeholder' ? t.design_status_initial_draft_placeholder : 
+               generatedResult?.status === 'pending_designer_review' ? t.design_status_pending_review_mockup : 
+               t.generating}
+            </h2>
             <p className="text-brand-green text-sm font-medium tracking-wide uppercase animate-pulse-slow">{loadingStatus}</p>
           </div>
         )}
@@ -1021,7 +1070,7 @@ function App() {
 
              <div className="bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden shadow-2xl">
                 
-                {(generatedResult.status === 'pending_designer_review' || generatedResult.status === 'generating_by_designer') ? (
+                {(generatedResult.status === 'initial_draft_placeholder' || generatedResult.status === 'ai_draft_generated' || generatedResult.status === 'pending_designer_review' || generatedResult.status === 'generating_by_designer') ? (
                   <div className="relative w-full aspect-video bg-[#0f0f0f] flex flex-col items-center justify-center text-center p-4">
                      {/* Placeholder for pending web design */}
                      <img 
@@ -1029,7 +1078,12 @@ function App() {
                         alt="Pending Design" 
                         className="w-full h-auto max-h-80 object-contain mb-4 animate-pulse-slow" 
                       />
-                     <h3 className="text-xl font-bold text-white mb-2">{generatedResult.status === 'pending_designer_review' ? t.design_status_pending_review_mockup : t.design_status_generating_by_designer}</h3>
+                     <h3 className="text-xl font-bold text-white mb-2">
+                       {generatedResult.status === 'initial_draft_placeholder' ? t.design_status_initial_draft_placeholder :
+                        generatedResult.status === 'ai_draft_generated' ? t.design_status_ai_draft_generated :
+                        generatedResult.status === 'pending_designer_review' ? t.design_status_pending_review_mockup : 
+                        t.design_status_generating_by_designer}
+                      </h3>
                      <p className="text-gray-400 text-sm max-w-sm">{t.web_design_pending_message}</p>
                      {generatedResult.designTaskId && <p className="text-xs text-gray-500 mt-4">Task ID: {generatedResult.designTaskId}</p>}
                   </div>
@@ -1089,7 +1143,9 @@ function App() {
                             generatedResult.type === 'identity' ? t.type_identity :
                             generatedResult.type === 'social' ? t.type_social :
                             t.type_brochure} 
-                            {generatedResult.status === 'pending_designer_review' ? ` (${t.design_status_pending_review_mockup})` : 
+                            {generatedResult.status === 'initial_draft_placeholder' ? ` (${t.design_status_initial_draft_placeholder})` : 
+                             generatedResult.status === 'ai_draft_generated' ? ` (${t.design_status_ai_draft_generated})` : 
+                             generatedResult.status === 'pending_designer_review' ? ` (${t.design_status_pending_review_mockup})` : 
                              generatedResult.status === 'generating_by_designer' ? ` (${t.design_status_generating_by_designer})` : ''} 
                              • {new Date(generatedResult.timestamp).toLocaleDateString()}
                          </p>
@@ -1170,7 +1226,7 @@ function App() {
                    history.map(item => (
                      <div key={item.id} className="bg-black/50 border border-gray-800 rounded-lg p-3 hover:border-brand-green transition-colors cursor-pointer group" onClick={() => loadFromHistory(item)}>
                         <img 
-                          src={item.imageUrl || '/assets/pending-web-design.svg'} 
+                          src={item.imageUrl || GENERIC_WEB_DRAFT_SVG_DATA_URL} // Use placeholder for null/empty
                           alt={item.type} 
                           className="w-full h-32 object-cover rounded-md mb-3" 
                         />
@@ -1178,6 +1234,8 @@ function App() {
                         <div className="flex justify-between items-center">
                            <span className="text-xs text-brand-green uppercase">
                               {item.type}
+                              {item.status === 'initial_draft_placeholder' && ` (${t.design_status_initial_draft_placeholder})`}
+                              {item.status === 'ai_draft_generated' && ` (${t.design_status_ai_draft_generated})`}
                               {item.status === 'pending_designer_review' && ` (${t.design_status_pending_review_mockup})`}
                               {item.status === 'generating_by_designer' && ` (${t.design_status_generating_by_designer})`}
                            </span>
