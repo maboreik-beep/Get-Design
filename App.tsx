@@ -225,7 +225,7 @@ function App() {
           company: contactDetails.company,
           email: contactDetails.email,
           phone: contactDetails.phone,
-          design_interest: designType,
+          design_interest: designType, // Pass the current designType as interest
         })
       });
 
@@ -265,6 +265,7 @@ function App() {
         contactId: contactDetails.id, // Ensure contactId is passed
         // brochureBase64 is passed via `businessData` if in form mode
         // For zip mode, `zipFile` is passed and backend extracts content
+        brochureBase64: brochureBase64, // Pass brochureBase64 here
       };
 
       const result = await generateDesign(

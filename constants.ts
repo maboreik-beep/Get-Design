@@ -1,6 +1,6 @@
 
 
-import { Translation, Language } from './types';
+import { Translation, Language, TemplateCategory } from './types';
 
 export const SUPPORT_NUMBER = "201557704781";
 
@@ -9,6 +9,17 @@ export const SUPPORT_NUMBER = "201557704781";
 
 export const WEBSITE_PAGES = [
   "Home", "About Us", "Services", "Contact", "Portfolio", "Blog", "Team", "Pricing", "FAQ", "Testimonials"
+];
+
+export const TEMPLATE_CATEGORIES: TemplateCategory[] = [
+  'logo', 
+  'brand_identity', 
+  'social_media', 
+  'brochure_catalog',
+  'brochure_landscape',
+  'brochure_portrait',
+  'tri_fold_flyer',
+  'website_design'
 ];
 
 export const TRANSLATIONS: Record<Language, Translation> = {
@@ -146,6 +157,7 @@ export const TRANSLATIONS: Record<Language, Translation> = {
     admin_template_id: "Template ID (Unique)",
     admin_template_type: "Design Type",
     admin_template_visual_style: "Visual Style",
+    admin_template_category: "Category", // New translation key
     admin_template_industry_keywords: "Industry Keywords (comma-separated)",
     admin_template_prompt_hint: "Prompt Hint",
     admin_template_thumbnail_url: "Thumbnail URL (Direct Image Link)",
@@ -155,11 +167,24 @@ export const TRANSLATIONS: Record<Language, Translation> = {
     admin_col_id: "ID",
     admin_col_type: "Type",
     admin_col_style: "Style",
+    admin_col_category: "Category", // New translation key
     admin_col_keywords: "Keywords",
     admin_col_prompt: "Prompt Hint",
     admin_col_thumbnail: "Thumbnail",
     admin_col_examples: "Content Examples",
     admin_template_delete_confirm: "Are you sure you want to delete this template? This action cannot be undone.",
+    // Excel Export
+    admin_export_leads: "Export Leads to Excel",
+    admin_export_designs: "Export Designs to Excel",
+    // Template Categories
+    logo: "Logo",
+    brand_identity: "Brand Identity",
+    social_media: "Social Media",
+    brochure_catalog: "Brochure / Catalog",
+    brochure_landscape: "Brochure - Landscape",
+    brochure_portrait: "Brochure - Portrait",
+    tri_fold_flyer: "Tri-Fold Flyer",
+    website_design: "Website Design",
   },
   ar: {
     title: "جيت ديزاين AI",
@@ -295,6 +320,7 @@ export const TRANSLATIONS: Record<Language, Translation> = {
     admin_template_id: "معرف القالب (فريد)",
     admin_template_type: "نوع التصميم",
     admin_template_visual_style: "النمط المرئي",
+    admin_template_category: "الفئة", // New translation key
     admin_template_industry_keywords: "كلمات مفتاحية للمجال (مفصولة بفاصلة)",
     admin_template_prompt_hint: "تلميح للذكاء الاصطناعي",
     admin_template_thumbnail_url: "رابط الصورة المصغرة (رابط مباشر)",
@@ -304,10 +330,23 @@ export const TRANSLATIONS: Record<Language, Translation> = {
     admin_col_id: "المعرف",
     admin_col_type: "النوع",
     admin_col_style: "النمط",
+    admin_col_category: "الفئة", // New translation key
     admin_col_keywords: "كلمات مفتاحية",
     admin_col_prompt: "تلميح",
     admin_col_thumbnail: "صورة مصغرة",
     admin_col_examples: "أمثلة المحتوى",
     admin_template_delete_confirm: "هل أنت متأكد أنك تريد حذف هذا القالب؟ لا يمكن التراجع عن هذا الإجراء.",
+    // Excel Export
+    admin_export_leads: "تصدير العملاء المحتملين إلى Excel",
+    admin_export_designs: "تصدير التصميمات إلى Excel",
+    // Template Categories
+    logo: "الشعار",
+    brand_identity: "الهوية البصرية",
+    social_media: "وسائل التواصل الاجتماعي",
+    brochure_catalog: "البروشور / الكتالوج",
+    brochure_landscape: "بروشور - أفقي",
+    brochure_portrait: "بروشور - رأسي",
+    tri_fold_flyer: "مطوية ثلاثية",
+    website_design: "تصميم الموقع الإلكتروني",
   }
 };

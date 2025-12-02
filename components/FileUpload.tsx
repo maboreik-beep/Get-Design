@@ -100,25 +100,27 @@ export const FileUpload = <T extends string | File = string>({
           const result = await processFile(file);
           processedResults.push(result);
         } catch (error: unknown) {
-          // Fix: Explicitly cast 'file' to 'File' and 'error' to 'Error'.
-          const fileName = (file as File).name || 'Unknown File';
-          console.error("Error processing file:", fileName, (error as Error).message);
+          // Fix: Safely handle 'error' which is of type 'unknown'.
+          // 'file' is correctly typed as 'File' here from the Array.from(files) iteration.
+          const fileName = file.name || 'Unknown File';
+          console.error("Error processing file:", fileName, error instanceof Error ? error.message : String(error));
         }
       }
       onFileSelect(processedResults); 
     } else {
       // Single file logic (existing)
       try {
-        const file = files[0];
+        const file = files[0]; // 'files[0]' is guaranteed to be 'File' here due to the initial length check.
         const result = await processFile(file); // result is now of type T
         if (typeof result === 'string' && file.type.startsWith('image/')) {
           setPreview(result); // Show image preview for single image
         }
         onFileSelect(result); 
       } catch (error: unknown) {
-        // Fix: Explicitly cast 'files[0]' to 'File' and 'error' to 'Error'.
-        const fileName = (files[0] as File)?.name || 'Unknown File';
-        console.error("Error processing single file:", fileName, (error as Error).message);
+        // Fix: Safely handle 'error' which is of type 'unknown'.
+        // 'files[0]' is guaranteed to be 'File' here due to the initial length check.
+        const fileName = files[0].name || 'Unknown File';
+        console.error("Error processing single file:", fileName, error instanceof Error ? error.message : String(error));
       }
     }
   };

@@ -14,6 +14,8 @@ import os from 'os';
 import { promisify } from 'util';
 import pdfParse from 'pdf-parse';
 import mammoth from 'mammoth';
+import ExcelJS from 'exceljs'; // New: Import exceljs
+
 // Removed: import fetch from 'node-fetch'; // Use native fetch now
 
 // Load environment variables from .env file (for local development)
@@ -65,6 +67,7 @@ async function initializeDatabase() {
       id TEXT PRIMARY KEY, -- e.g., 'logo-L1-minimalist-tech'
       type TEXT NOT NULL,
       visual_style TEXT NOT NULL,
+      category TEXT NOT NULL, -- New: Category for grouping templates
       industry_keywords TEXT, -- Stored as JSON string: ['tech', 'software']
       prompt_hint TEXT NOT NULL,
       thumbnail_url TEXT, -- Direct URL from Google Drive
@@ -88,6 +91,7 @@ async function insertInitialTemplates() {
       id: 'logo-L1-minimalist-tech',
       type: 'logo',
       visual_style: 'minimalist',
+      category: 'logo',
       industry_keywords: JSON.stringify(['tech', 'technology', 'software', 'startup', 'digital', 'innovation', 'IT', 'AI', 'data']),
       prompt_hint: 'Design a clean, abstract, geometric logo for a tech company. Focus on a simple, memorable icon, modern typography, and a fresh color palette. Minimalist layout with ample negative space.',
       thumbnail_url: '', // PASTE YOUR DIRECT GOOGLE DRIVE URL FOR LOGO TEMPLATE L1 HERE
@@ -97,6 +101,7 @@ async function insertInitialTemplates() {
       id: 'logo-L2-bold-gaming',
       type: 'logo',
       visual_style: 'bold',
+      category: 'logo',
       industry_keywords: JSON.stringify(['gaming', 'esports', 'entertainment', 'interactive', 'virtual reality']),
       prompt_hint: 'Create a bold, dynamic logo with an edgy mascot or icon for a gaming company. Use strong contrasts, energetic colors, and modern, aggressive typography. Emphasize speed, competition, and immersive experiences.',
       thumbnail_url: '', // PASTE YOUR DIRECT GOOGLE DRIVE URL FOR LOGO TEMPLATE L2 HERE
@@ -107,6 +112,7 @@ async function insertInitialTemplates() {
       id: 'identity-BI1-elegant-luxury',
       type: 'identity',
       visual_style: 'elegant',
+      category: 'brand_identity',
       industry_keywords: JSON.stringify(['luxury', 'fashion', 'jewelry', 'boutique', 'high-end', 'premium']),
       prompt_hint: 'Render an elegant and sophisticated brand identity kit flat-lay. Feature a refined logomark, classic serif typography, and a subdued color palette with metallic accents. Include items like embossed business cards, letterhead, and product packaging, highlighting quality and exclusivity.',
       thumbnail_url: '', // PASTE YOUR DIRECT GOOGLE DRIVE URL FOR BRAND IDENTITY TEMPLATE BI1 HERE
@@ -116,6 +122,7 @@ async function insertInitialTemplates() {
       id: 'identity-BI2-playful-children',
       type: 'identity',
       visual_style: 'playful',
+      category: 'brand_identity',
       industry_keywords: JSON.stringify(['children', 'kids', 'toys', 'education', 'play', 'family']),
       prompt_hint: 'Design a whimsical and colorful brand identity kit flat-lay for a children\'s brand. Use a cheerful logotype with rounded letters, playful illustrations, and a bright color scheme. Items include fun business cards, stickers, and product tags, emphasizing joy and creativity.',
       thumbnail_url: '', // PASTE YOUR DIRECT GOOGLE DRIVE URL FOR BRAND IDENTITY TEMPLATE BI2 HERE
@@ -126,6 +133,7 @@ async function insertInitialTemplates() {
       id: 'social-SM1-minimalist-business',
       type: 'social',
       visual_style: 'minimalist',
+      category: 'social_media',
       industry_keywords: JSON.stringify(['corporate', 'business', 'consulting', 'finance', 'professional services']),
       prompt_hint: 'Create a clean, minimalist social media post template for a professional business. Use a neutral color palette with one accent color, clear sans-serif typography, and subtle geometric elements. Focus on a clear message with minimal clutter.',
       thumbnail_url: '', // PASTE YOUR DIRECT GOOGLE DRIVE URL FOR SOCIAL MEDIA TEMPLATE SM1 HERE
@@ -135,6 +143,7 @@ async function insertInitialTemplates() {
       id: 'social-SM2-bold-fitness',
       type: 'social',
       visual_style: 'bold',
+      category: 'social_media',
       industry_keywords: JSON.stringify(['fitness', 'gym', 'health', 'wellness', 'sports', 'training']),
       prompt_hint: 'Design a bold, high-energy social media post template for a fitness brand. Use strong action imagery, vibrant colors, and impactful, distressed typography. Emphasize strength, motivation, and results.',
       thumbnail_url: '', // PASTE YOUR DIRECT GOOGLE DRIVE URL FOR SOCIAL MEDIA TEMPLATE SM2 HERE
@@ -146,6 +155,7 @@ async function insertInitialTemplates() {
       id: 'brochure-BL1-futuristic-tech',
       type: 'brochure',
       visual_style: 'futuristic',
+      category: 'brochure_landscape',
       industry_keywords: JSON.stringify(['tech', 'software', 'AI', 'robotics', 'innovation', 'future']),
       prompt_hint: 'Design a multi-page landscape brochure with a futuristic and sleek aesthetic. Incorporate glowing lines, abstract geometric patterns, and a dark theme. Use modern sans-serif fonts and clean data visualization elements. Emphasize innovation and advanced technology.',
       thumbnail_url: '', // PASTE YOUR DIRECT GOOGLE DRIVE URL FOR BROCHURE LANDSCAPE TEMPLATE BL1 HERE
@@ -155,6 +165,7 @@ async function insertInitialTemplates() {
       id: 'brochure-BL2-elegant-travel',
       type: 'brochure',
       visual_style: 'elegant',
+      category: 'brochure_landscape',
       industry_keywords: JSON.stringify(['travel', 'tourism', 'luxury resort', 'vacation', 'hospitality', 'destinations']),
       prompt_hint: 'Create an elegant landscape brochure for a luxury travel agency. Feature stunning photography of exotic destinations, sophisticated serif typography, and a spacious layout. Use a serene color palette with hints of gold, conveying relaxation and exclusivity.',
       thumbnail_url: '', // PASTE YOUR DIRECT GOOGLE DRIVE URL FOR BROCHURE LANDSCAPE TEMPLATE BL2 HERE
@@ -165,6 +176,7 @@ async function insertInitialTemplates() {
       id: 'brochure-BP1-minimalist-corporate',
       type: 'brochure',
       visual_style: 'minimalist',
+      category: 'brochure_portrait',
       industry_keywords: JSON.stringify(['corporate', 'consulting', 'business', 'finance', 'legal']),
       prompt_hint: 'Design a clean, minimalist portrait brochure for a corporate consulting firm. Use a professional blue/grey color scheme, crisp sans-serif typography, and a structured layout with clear sections. Focus on conveying professionalism and clarity.',
       thumbnail_url: '', // PASTE YOUR DIRECT GOOGLE DRIVE URL FOR BROCHURE PORTRAIT TEMPLATE BP1 HERE
@@ -174,9 +186,10 @@ async function insertInitialTemplates() {
       id: 'brochure-BP2-playful-education',
       type: 'brochure',
       visual_style: 'playful',
+      category: 'brochure_portrait',
       industry_keywords: JSON.stringify(['education', 'school', 'university', 'learning', 'kids', 'youth']),
       prompt_hint: 'Create a vibrant, playful portrait brochure for an educational institution. Use a bright, inviting color palette, engaging illustrations, and fun, readable typography. Design for a young audience, emphasizing discovery and interactive learning.',
-      thumbnailUrl: '', // PASTE YOUR DIRECT GOOGLE DRIVE URL FOR BROCHURE PORTRAIT TEMPLATE BP2 HERE
+      thumbnail_url: '', // PASTE YOUR DIRECT GOOGLE DRIVE URL FOR BROCHURE PORTRAIT TEMPLATE BP2 HERE
       generated_content_examples: JSON.stringify({ headline: 'Ignite a Passion for Learning', body: 'Our innovative programs and dedicated educators foster a dynamic environment where students thrive, explore, and achieve their fullest potential.', cta: 'Enroll Today' })
     },
     // Tri-Fold Flyer
@@ -184,9 +197,10 @@ async function insertInitialTemplates() {
       id: 'brochure-TF1-bold-marketing',
       type: 'brochure',
       visual_style: 'bold',
+      category: 'tri_fold_flyer',
       industry_keywords: JSON.stringify(['marketing', 'advertising', 'agency', 'promotion', 'sales']),
       prompt_hint: 'Design a bold and impactful tri-fold flyer for a marketing agency. Use strong visuals, contrasting colors, and energetic typography to grab attention. Structure clearly defined sections for services, benefits, and contact information.',
-      thumbnailUrl: '', // PASTE YOUR DIRECT GOOGLE DRIVE URL FOR TRI-FOLD FLYER TEMPLATE TF1 HERE
+      thumbnail_url: '', // PASTE YOUR DIRECT GOOGLE DRIVE URL FOR TRI-FOLD FLYER TEMPLATE TF1 HERE
       generated_content_examples: JSON.stringify({ headline: 'Supercharge Your Brand', body: 'Unlock unparalleled visibility and engagement with our innovative marketing strategies, designed to connect you with your audience and drive measurable results.', cta: 'Get Your Free Audit' })
     },
     // --- WEB DESIGN Templates ---
@@ -194,6 +208,7 @@ async function insertInitialTemplates() {
       id: 'web-W1-futuristic-software',
       type: 'web',
       visual_style: 'futuristic',
+      category: 'website_design',
       industry_keywords: JSON.stringify(['software', 'cloud', 'AI', 'SaaS', 'platform', 'startup', 'web development']),
       prompt_hint: 'Design a responsive website layout with a futuristic, dark mode aesthetic. Incorporate glowing UI elements, abstract backgrounds, and modern sans-serif typography. Focus on clean data presentation, intuitive navigation, and engaging hero sections for a software product.',
       thumbnail_url: '', // PASTE YOUR DIRECT GOOGLE DRIVE URL FOR WEB DESIGN TEMPLATE W1 HERE
@@ -203,6 +218,7 @@ async function insertInitialTemplates() {
       id: 'web-W2-elegant-photography',
       type: 'web',
       visual_style: 'elegant',
+      category: 'website_design',
       industry_keywords: JSON.stringify(['photography', 'art', 'portfolio', 'creative', 'gallery', 'artist']),
       prompt_hint: 'Create an elegant and minimalist website layout for a professional photography portfolio. Emphasize large, high-quality image displays, subtle hover effects, and sophisticated serif typography. Use a clean, monochromatic color scheme to let the visuals speak. Showcase work with grace and impact.',
       thumbnail_url: '', // PASTE YOUR DIRECT GOOGLE DRIVE URL FOR WEB DESIGN TEMPLATE W2 HERE
@@ -213,9 +229,9 @@ async function insertInitialTemplates() {
   for (const template of initialTemplates) {
     try {
       await db.run(
-        `INSERT INTO ConceptualTemplates (id, type, visual_style, industry_keywords, prompt_hint, thumbnail_url, generated_content_examples) 
-         VALUES (?, ?, ?, ?, ?, ?, ?)`,
-        template.id, template.type, template.visual_style, template.industry_keywords, 
+        `INSERT INTO ConceptualTemplates (id, type, visual_style, category, industry_keywords, prompt_hint, thumbnail_url, generated_content_examples) 
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        template.id, template.type, template.visual_style, template.category, template.industry_keywords, 
         template.prompt_hint, template.thumbnail_url, template.generated_content_examples
       );
     } catch (error) {
@@ -341,6 +357,7 @@ function parseDataUrl(dataUrl) {
 async function selectTemplate(designType, industry, visualStyle) {
   const allTemplates = await db.all("SELECT * FROM ConceptualTemplates");
 
+  // First, filter by type (mandatory match)
   let candidates = allTemplates.filter(t => t.type === designType);
 
   candidates = candidates.map(template => {
@@ -430,12 +447,18 @@ app.post('/api/generate-design', upload.single('zipFile'), async (req, res) => {
     return res.status(500).json({ error: "Server API Key not configured. Please contact support." });
   }
 
-  let { type, businessData, logoBase64, brochureBase64 } = req.body;
+  let { type, businessData, logoBase64 } = req.body;
   
   // businessData comes as string from FormData, parse it
   if (typeof businessData === 'string') {
     businessData = JSON.parse(businessData);
   }
+
+  // Extract brochureBase64 from parsed businessData if present
+  let brochureBase64 = businessData.brochureBase64;
+  if (typeof brochureBase64 === 'string') brochureBase64 = [brochureBase64];
+  if (!brochureBase64) brochureBase64 = [];
+
 
   let descriptionFromZip = ''; // To store description extracted from zip
   let logoFromZip = ''; // To store logo extracted from zip
@@ -490,9 +513,7 @@ app.post('/api/generate-design', upload.single('zipFile'), async (req, res) => {
       }
       // Prioritize zip-extracted content over form-based uploads for images
       logoBase64 = logoFromZip || logoBase64;
-      brochureBase64 = brochureFromZip ? [brochureFromZip] : (brochureBase64 || null); // Treat as array from zip
-      if (typeof brochureBase64 === 'string') brochureBase64 = [brochureBase64];
-
+      brochureBase64 = brochureFromZip ? [brochureFromZip] : (brochureBase64 || []); // Treat as array from zip
 
       // Augment or replace description
       businessData.description = descriptionFromZip || businessData.description;
@@ -954,6 +975,40 @@ app.get('/api/admin/leads', authenticateAdmin, async (req, res) => {
   }
 });
 
+// Admin API to export leads to Excel
+app.get('/api/admin/leads/export', authenticateAdmin, async (req, res) => {
+  try {
+    const leads = await db.all("SELECT id, name, company, email, phone, design_interest, created_at FROM Leads ORDER BY created_at DESC");
+
+    const workbook = new ExcelJS.Workbook();
+    const worksheet = workbook.addWorksheet('Leads');
+
+    worksheet.columns = [
+      { header: 'ID', key: 'id', width: 10 },
+      { header: 'Name', key: 'name', width: 30 },
+      { header: 'Company', key: 'company', width: 30 },
+      { header: 'Email', key: 'email', width: 40 },
+      { header: 'Phone', key: 'phone', width: 20 },
+      { header: 'Design Interest', key: 'design_interest', width: 25 },
+      { header: 'Created At', key: 'created_at', width: 25 },
+    ];
+
+    leads.forEach(lead => {
+      worksheet.addRow(lead);
+    });
+
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', 'attachment; filename=leads.xlsx');
+    await workbook.xlsx.write(res);
+    res.end();
+
+  } catch (err) {
+    console.error("Error exporting leads to Excel:", err);
+    res.status(500).json({ error: "Failed to export leads." });
+  }
+});
+
+
 // Admin API to get generated designs, with search by email or phone
 app.get('/api/admin/designs', authenticateAdmin, async (req, res) => {
   const { email, phone } = req.query;
@@ -989,19 +1044,76 @@ app.get('/api/admin/designs', authenticateAdmin, async (req, res) => {
   }
 });
 
+// Admin API to export designs to Excel
+app.get('/api/admin/designs/export', authenticateAdmin, async (req, res) => {
+  try {
+    const designs = await db.all(`
+      SELECT gd.id, gd.design_type, gd.business_name, gd.industry, gd.description, gd.image_url, gd.template_link, gd.conceptual_template_id, gd.created_at,
+             l.name AS contact_name, l.company AS contact_company, l.email AS contact_email, l.phone AS contact_phone
+      FROM GeneratedDesigns gd
+      LEFT JOIN Leads l ON gd.contact_id = l.id
+      ORDER BY gd.created_at DESC
+    `);
+
+    const workbook = new ExcelJS.Workbook();
+    const worksheet = workbook.addWorksheet('Generated Designs');
+
+    worksheet.columns = [
+      { header: 'ID', key: 'id', width: 10 },
+      { header: 'Design Type', key: 'design_type', width: 20 },
+      { header: 'Business Name', key: 'business_name', width: 30 },
+      { header: 'Industry', key: 'industry', width: 25 },
+      { header: 'Description', key: 'description', width: 50 },
+      { header: 'Image URL', key: 'image_url', width: 60 },
+      { header: 'Template Link', key: 'template_link', width: 40 },
+      { header: 'Conceptual Template ID', key: 'conceptual_template_id', width: 30 },
+      { header: 'Created At', key: 'created_at', width: 25 },
+      { header: 'Contact Name', key: 'contact_name', width: 30 },
+      { header: 'Contact Company', key: 'contact_company', width: 30 },
+      { header: 'Contact Email', key: 'contact_email', width: 40 },
+      { header: 'Contact Phone', key: 'contact_phone', width: 20 },
+    ];
+
+    designs.forEach(design => {
+      worksheet.addRow(design);
+    });
+
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', 'attachment; filename=generated_designs.xlsx');
+    await workbook.xlsx.write(res);
+    res.end();
+
+  } catch (err) {
+    console.error("Error exporting designs to Excel:", err);
+    res.status(500).json({ error: "Failed to export designs." });
+  }
+});
+
+
 // Admin API to get all conceptual templates
 app.get('/api/admin/conceptual-templates', authenticateAdmin, async (req, res) => {
+  const { category } = req.query;
+  let query = "SELECT * FROM ConceptualTemplates";
+  const params = [];
+
+  if (category && category !== 'all') {
+    query += " WHERE category = ?";
+    params.push(category);
+  }
+  query += " ORDER BY id ASC";
+
   try {
-    const templates = await db.all("SELECT * FROM ConceptualTemplates ORDER BY id ASC");
+    const templates = await db.all(query, ...params);
     // Parse JSON fields before sending to frontend
     const parsedTemplates = templates.map(t => ({
-      ...t,
-      industryKeywords: JSON.parse(t.industry_keywords || '[]'),
-      generatedContentExamples: JSON.parse(t.generated_content_examples || '{}'),
+      id: t.id,
       type: t.type, // Ensure type is correctly mapped
       visualStyle: t.visual_style, // Ensure visualStyle is correctly mapped
+      category: t.category, // Ensure category is correctly mapped
+      industryKeywords: JSON.parse(t.industry_keywords || '[]'),
       promptHint: t.prompt_hint,
       thumbnailUrl: t.thumbnail_url,
+      generatedContentExamples: JSON.parse(t.generated_content_examples || '{}'),
     }));
     res.json(parsedTemplates);
   } catch (err) {
@@ -1012,17 +1124,17 @@ app.get('/api/admin/conceptual-templates', authenticateAdmin, async (req, res) =
 
 // Admin API to create a new conceptual template
 app.post('/api/admin/conceptual-templates', authenticateAdmin, async (req, res) => {
-  const { id, type, visualStyle, industryKeywords, promptHint, thumbnailUrl, generatedContentExamples } = req.body;
+  const { id, type, visualStyle, category, industryKeywords, promptHint, thumbnailUrl, generatedContentExamples } = req.body;
 
-  if (!id || !type || !visualStyle || !promptHint) {
-    return res.status(400).json({ error: "Missing required template fields: id, type, visualStyle, promptHint." });
+  if (!id || !type || !visualStyle || !category || !promptHint) {
+    return res.status(400).json({ error: "Missing required template fields: id, type, visualStyle, category, promptHint." });
   }
 
   try {
     await db.run(
-      `INSERT INTO ConceptualTemplates (id, type, visual_style, industry_keywords, prompt_hint, thumbnail_url, generated_content_examples) 
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
-      id, type, visualStyle, JSON.stringify(industryKeywords), promptHint, thumbnailUrl, JSON.stringify(generatedContentExamples)
+      `INSERT INTO ConceptualTemplates (id, type, visual_style, category, industry_keywords, prompt_hint, thumbnail_url, generated_content_examples) 
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      id, type, visualStyle, category, JSON.stringify(industryKeywords), promptHint, thumbnailUrl, JSON.stringify(generatedContentExamples)
     );
     res.status(201).json({ message: "Template created successfully." });
   } catch (err) {
@@ -1037,18 +1149,18 @@ app.post('/api/admin/conceptual-templates', authenticateAdmin, async (req, res) 
 // Admin API to update an existing conceptual template
 app.put('/api/admin/conceptual-templates/:id', authenticateAdmin, async (req, res) => {
   const templateId = req.params.id;
-  const { type, visualStyle, industryKeywords, promptHint, thumbnailUrl, generatedContentExamples } = req.body;
+  const { type, visualStyle, category, industryKeywords, promptHint, thumbnailUrl, generatedContentExamples } = req.body;
 
-  if (!type || !visualStyle || !promptHint) {
-    return res.status(400).json({ error: "Missing required template fields: type, visualStyle, promptHint." });
+  if (!type || !visualStyle || !category || !promptHint) {
+    return res.status(400).json({ error: "Missing required template fields: type, visualStyle, category, promptHint." });
   }
 
   try {
     const result = await db.run(
       `UPDATE ConceptualTemplates 
-       SET type = ?, visual_style = ?, industry_keywords = ?, prompt_hint = ?, thumbnail_url = ?, generated_content_examples = ?
+       SET type = ?, visual_style = ?, category = ?, industry_keywords = ?, prompt_hint = ?, thumbnail_url = ?, generated_content_examples = ?
        WHERE id = ?`,
-      type, visualStyle, JSON.stringify(industryKeywords), promptHint, thumbnailUrl, JSON.stringify(generatedContentExamples), templateId
+      type, visualStyle, category, JSON.stringify(industryKeywords), promptHint, thumbnailUrl, JSON.stringify(generatedContentExamples), templateId
     );
     if (result.changes === 0) {
       return res.status(404).json({ error: "Template not found." });

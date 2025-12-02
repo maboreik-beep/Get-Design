@@ -11,6 +11,17 @@ export type DesignType = 'logo' | 'identity' | 'social' | 'brochure' | 'web';
 
 export type VisualStyle = 'minimalist' | 'bold' | 'elegant' | 'playful' | 'futuristic';
 
+export type TemplateCategory = 
+  'logo' | 
+  'brand_identity' | 
+  'social_media' | 
+  'brochure_catalog' | 
+  'brochure_landscape' | 
+  'brochure_portrait' | 
+  'tri_fold_flyer' | 
+  'website_design';
+
+
 export type InputMode = 'form' | 'zip'; // New type to control input method
 
 export interface ContactDetails {
@@ -78,6 +89,7 @@ export interface ConceptualTemplate {
   id: string; // Unique identifier for the template, e.g., 'logo-L1-minimalist-tech'
   type: DesignType;
   visualStyle: VisualStyle;
+  category: TemplateCategory; // New: Category for grouping templates
   industryKeywords: string[]; // Stored as JSON string in DB, parsed to array
   promptHint: string;
   thumbnailUrl?: string; // Direct public URL for the template image
@@ -86,7 +98,7 @@ export interface ConceptualTemplate {
 
 // Interfaces for Admin Dashboard data (from backend)
 export interface LeadRecord {
-  id: number;
+  id: number; // Added for backend primary key
   name: string;
   company: string;
   email: string;

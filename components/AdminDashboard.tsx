@@ -1,194 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { LeadRecord, GeneratedDesignRecord, Language, ConceptualTemplate, DesignType, VisualStyle, GeneratedContentExamples } from '../types';
-import { TRANSLATIONS } from '../constants';
-
-// Define a type alias for the initial seed templates to help TypeScript correctly infer the type
-type InitialConceptualTemplateSeed = Omit<ConceptualTemplate, 'industryKeywords' | 'generatedContentExamples'> & {
-  industryKeywords: string[];
-  generatedContentExamples: GeneratedContentExamples;
-};
-
-// Helper for initial template seed data (moved from server)
-const initialSeedTemplates: InitialConceptualTemplateSeed[] = [
-  // --- LOGO Templates ---
-  {
-    id: 'logo-L1-minimalist-tech',
-    type: 'logo',
-    visualStyle: 'minimalist',
-    industryKeywords: ['tech', 'technology', 'software', 'startup', 'digital', 'innovation', 'IT', 'AI', 'data'],
-    promptHint: 'Design a clean, abstract, geometric logo for a tech company. Focus on a simple, memorable icon, modern typography, and a fresh color palette. Minimalist layout with ample negative space.',
-    thumbnailUrl: '', 
-    generatedContentExamples: {
-      headline: 'TechFlow Innovations',
-      body: 'Streamlining Tomorrow, Today',
-      cta: 'Explore Solutions'
-    }
-  },
-  {
-    id: 'logo-L2-bold-gaming',
-    type: 'logo',
-    visualStyle: 'bold',
-    industryKeywords: ['gaming', 'esports', 'entertainment', 'interactive', 'virtual reality'],
-    promptHint: 'Create a bold, dynamic logo with an edgy mascot or icon for a gaming company. Use strong contrasts, energetic colors, and modern, aggressive typography. Emphasize speed, competition, and immersive experiences.',
-    thumbnailUrl: '', 
-    generatedContentExamples: {
-      headline: 'Pixel Vanguard',
-      body: 'Conquer Every Realm',
-      cta: 'Join Now'
-    }
-  },
-  // --- BRAND IDENTITY Templates ---
-  {
-    id: 'identity-BI1-elegant-luxury',
-    type: 'identity',
-    visualStyle: 'elegant',
-    industryKeywords: ['luxury', 'fashion', 'jewelry', 'boutique', 'high-end', 'premium'],
-    promptHint: 'Render an elegant and sophisticated brand identity kit flat-lay. Feature a refined logomark, classic serif typography, and a subdued color palette with metallic accents. Include items like embossed business cards, letterhead, and product packaging, highlighting quality and exclusivity.',
-    thumbnailUrl: '', 
-    generatedContentExamples: {
-      headline: 'Eclat Couture',
-      body: 'Redefining Opulence',
-      cta: 'Discover Our Collection'
-    }
-  },
-  {
-    id: 'identity-BI2-playful-children',
-    type: 'identity',
-    visualStyle: 'playful',
-    industryKeywords: ['children', 'kids', 'toys', 'education', 'play', 'family'],
-    promptHint: 'Design a whimsical and colorful brand identity kit flat-lay for a children\'s brand. Use a cheerful logotype with rounded letters, playful illustrations, and a bright color scheme. Items include fun business cards, stickers, and product tags, emphasizing joy and creativity.',
-    thumbnailUrl: '', 
-    generatedContentExamples: {
-      headline: 'Curio Kids Club',
-      body: 'Where Imagination Takes Flight',
-      cta: 'Explore & Play'
-    }
-  },
-  // --- SOCIAL MEDIA Templates ---
-  {
-    id: 'social-SM1-minimalist-business',
-    type: 'social',
-    visualStyle: 'minimalist',
-    industryKeywords: ['corporate', 'business', 'consulting', 'finance', 'professional services'],
-    promptHint: 'Create a clean, minimalist social media post template for a professional business. Use a neutral color palette with one accent color, clear sans-serif typography, and subtle geometric elements. Focus on a clear message with minimal clutter.',
-    thumbnailUrl: '', 
-    generatedContentExamples: {
-      headline: 'Elevate Your Strategy',
-      body: 'Expert Insights for Growth',
-      cta: 'Read Our Whitepaper'
-    }
-  },
-  {
-    id: 'social-SM2-bold-fitness',
-    type: 'social',
-    visualStyle: 'bold',
-    industryKeywords: ['fitness', 'gym', 'health', 'wellness', 'sports', 'training'],
-    promptHint: 'Design a bold, high-energy social media post template for a fitness brand. Use strong action imagery, vibrant colors, and impactful, distressed typography. Emphasize strength, motivation, and results.',
-    thumbnailUrl: '', 
-    generatedContentExamples: {
-      headline: 'Unleash Your Power',
-      body: 'Transform Your Body, Mind, and Spirit',
-      cta: 'Start Your Journey'
-    }
-  },
-  // --- BROCHURE/CATALOG Templates ---
-  // Brochure-Catalog-Landscape
-  {
-    id: 'brochure-BL1-futuristic-tech',
-    type: 'brochure',
-    visualStyle: 'futuristic',
-    industryKeywords: ['tech', 'software', 'AI', 'robotics', 'innovation', 'future'],
-    promptHint: 'Design a multi-page landscape brochure with a futuristic and sleek aesthetic. Incorporate glowing lines, abstract geometric patterns, and a dark theme. Use modern sans-serif fonts and clean data visualization elements. Emphasize innovation and advanced technology.',
-    thumbnailUrl: '', 
-    generatedContentExamples: {
-      headline: 'Pioneering Tomorrow\'s Solutions',
-      body: 'Our advanced technological platforms are engineered to deliver unparalleled efficiency, driving your enterprise into a new era of digital excellence and innovation.',
-      cta: 'Request a Live Demo'
-    }
-  },
-  {
-    id: 'brochure-BL2-elegant-travel',
-    type: 'brochure',
-    visualStyle: 'elegant',
-    industryKeywords: ['travel', 'tourism', 'luxury resort', 'vacation', 'hospitality', 'destinations'],
-    promptHint: 'Create an elegant landscape brochure for a luxury travel agency. Feature stunning photography of exotic destinations, sophisticated serif typography, and a spacious layout. Use a serene color palette with hints of gold, conveying relaxation and exclusivity.',
-    thumbnailUrl: '', 
-    generatedContentExamples: {
-      headline: 'Your Journey, Reimagined',
-      body: 'Indulge in bespoke travel experiences meticulously crafted to inspire, enchant, and create indelible memories across the globe.',
-      cta: 'Book Your Escape'
-    }
-  },
-  // Brochure-Catalog-Portrait
-  {
-    id: 'brochure-BP1-minimalist-corporate',
-    type: 'brochure',
-    visualStyle: 'minimalist',
-    industryKeywords: ['corporate', 'consulting', 'business', 'finance', 'legal'],
-    promptHint: 'Design a clean, minimalist portrait brochure for a corporate consulting firm. Use a professional blue/grey color scheme, crisp sans-serif typography, and a structured layout with clear sections. Focus on conveying professionalism and clarity.',
-    thumbnailUrl: '', 
-    generatedContentExamples: {
-      headline: 'Strategic Partnership for Success',
-      body: 'We provide tailored consulting services designed to optimize your operations, enhance market position, and drive sustainable business growth.',
-      cta: 'Schedule a Consultation'
-    }
-  },
-  {
-    id: 'brochure-BP2-playful-education',
-    type: 'brochure',
-    visualStyle: 'playful',
-    industryKeywords: ['education', 'school', 'university', 'learning', 'kids', 'youth'],
-    promptHint: 'Create a vibrant, playful portrait brochure for an educational institution. Use a bright, inviting color palette, engaging illustrations, and fun, readable typography. Design for a young audience, emphasizing discovery and interactive learning.',
-    thumbnailUrl: '', 
-    generatedContentExamples: {
-      headline: 'Ignite a Passion for Learning',
-      body: 'Our innovative programs and dedicated educators foster a dynamic environment where students thrive, explore, and achieve their fullest potential.',
-      cta: 'Enroll Today'
-    }
-  },
-  // Tri-Fold Flyer
-  {
-    id: 'brochure-TF1-bold-marketing',
-    type: 'brochure',
-    visualStyle: 'bold',
-    industryKeywords: ['marketing', 'advertising', 'agency', 'promotion', 'sales'],
-    promptHint: 'Design a bold and impactful tri-fold flyer for a marketing agency. Use strong visuals, contrasting colors, and energetic typography to grab attention. Structure clearly defined sections for services, benefits, and contact information.',
-    thumbnailUrl: '', 
-    generatedContentExamples: {
-      headline: 'Supercharge Your Brand',
-      body: 'Unlock unparalleled visibility and engagement with our innovative marketing strategies, designed to connect you with your audience and drive measurable results.',
-      cta: 'Get Your Free Audit'
-    }
-  },
-  // --- WEB DESIGN Templates ---
-  {
-    id: 'web-W1-futuristic-software',
-    type: 'web',
-    visualStyle: 'futuristic',
-    industryKeywords: ['software', 'cloud', 'AI', 'SaaS', 'platform', 'startup', 'web development'],
-    promptHint: 'Design a responsive website layout with a futuristic, dark mode aesthetic. Incorporate glowing UI elements, abstract backgrounds, and modern sans-serif typography. Focus on clean data presentation, intuitive navigation, and engaging hero sections for a software product.',
-    thumbnailUrl: '', 
-    generatedContentExamples: {
-      headline: 'Next-Gen AI Platform',
-      body: 'Empower your business with intelligent automation and data-driven insights, seamlessly integrated into your workflow for unprecedented efficiency.',
-      cta: 'Start Free Trial'
-    }
-  },
-  {
-    id: 'web-W2-elegant-photography',
-    type: 'web',
-    visualStyle: 'elegant',
-    industryKeywords: ['photography', 'art', 'portfolio', 'creative', 'gallery', 'artist'],
-    promptHint: 'Create an elegant and minimalist website layout for a professional photography portfolio. Emphasize large, high-quality image displays, subtle hover effects, and sophisticated serif typography. Use a clean, monochromatic color scheme to let the visuals speak. Showcase work with grace and impact.',
-    thumbnailUrl: '', 
-    generatedContentExamples: {
-      headline: 'Capturing Moments, Creating Art',
-      body: 'Discover a curated collection of evocative imagery, each frame a testament to the beauty and emotion found in every moment.',
-      cta: 'View Portfolio'
-    }
-  },
-];
-
+import { LeadRecord, GeneratedDesignRecord, Language, ConceptualTemplate, DesignType, VisualStyle, GeneratedContentExamples, TemplateCategory } from '../types';
+import { TRANSLATIONS, TEMPLATE_CATEGORIES } from '../constants';
 
 export const AdminDashboard: React.FC = () => {
   const [lang] = useState<Language>('en'); 
@@ -209,6 +21,8 @@ export const AdminDashboard: React.FC = () => {
 
   const [searchEmail, setSearchEmail] = useState('');
   const [searchPhone, setSearchPhone] = useState('');
+  const [filterTemplateCategory, setFilterTemplateCategory] = useState<TemplateCategory | 'all'>('all');
+
 
   // Template Modal State
   const [showTemplateModal, setShowTemplateModal] = useState(false);
@@ -220,6 +34,7 @@ export const AdminDashboard: React.FC = () => {
     id: '',
     type: 'logo',
     visualStyle: 'minimalist',
+    category: 'logo', // Default category
     industryKeywords: '',
     promptHint: '',
     thumbnailUrl: '',
@@ -244,7 +59,7 @@ export const AdminDashboard: React.FC = () => {
       // If on admin route but not authenticated, ensure tabs don't try to load
       setActiveTab('leads'); 
     }
-  }, [isAuthenticated, activeTab]); 
+  }, [isAuthenticated, activeTab, filterTemplateCategory]); // Added filterTemplateCategory to dependencies
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -343,7 +158,12 @@ export const AdminDashboard: React.FC = () => {
     setLoading(true);
     setDataError(null);
     try {
-      const response = await authenticatedFetch('/api/admin/conceptual-templates');
+      const queryParams = new URLSearchParams();
+      if (filterTemplateCategory !== 'all') {
+        queryParams.append('category', filterTemplateCategory);
+      }
+      
+      const response = await authenticatedFetch(`/api/admin/conceptual-templates?${queryParams.toString()}`);
       const data = await response.json();
 
       if (response.ok) {
@@ -378,6 +198,7 @@ export const AdminDashboard: React.FC = () => {
       id: '',
       type: 'logo',
       visualStyle: 'minimalist',
+      category: 'logo', // Default category
       industryKeywords: '',
       promptHint: '',
       thumbnailUrl: '',
@@ -431,8 +252,8 @@ export const AdminDashboard: React.FC = () => {
 
     try {
       // Basic validation
-      if (!templateForm.id || !templateForm.type || !templateForm.visualStyle || !templateForm.promptHint) {
-        throw new Error("Please fill in all required template fields (ID, Type, Visual Style, Prompt Hint).");
+      if (!templateForm.id || !templateForm.type || !templateForm.visualStyle || !templateForm.promptHint || !templateForm.category) {
+        throw new Error("Please fill in all required template fields (ID, Type, Visual Style, Category, Prompt Hint).");
       }
       try {
         JSON.parse(templateForm.generatedContentExamples);
@@ -444,6 +265,7 @@ export const AdminDashboard: React.FC = () => {
         id: templateForm.id,
         type: templateForm.type,
         visualStyle: templateForm.visualStyle,
+        category: templateForm.category, // Include category in payload
         industryKeywords: templateForm.industryKeywords.split(',').map(s => s.trim()).filter(s => s.length > 0),
         promptHint: templateForm.promptHint,
         thumbnailUrl: templateForm.thumbnailUrl || undefined,
@@ -480,6 +302,35 @@ export const AdminDashboard: React.FC = () => {
       setTemplateFormError(err.message || t.error_generic);
     }
   };
+
+  const handleExport = async (type: 'leads' | 'designs') => {
+    setLoading(true);
+    setDataError(null);
+    try {
+      const response = await authenticatedFetch(`/api/admin/${type}/export`);
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || t.error_generic);
+      }
+
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${type}-export-${new Date().toISOString().slice(0,10)}.xlsx`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+
+    } catch (err: any) {
+      console.error(`Failed to export ${type}:`, err);
+      setDataError(err.message || t.error_generic);
+    } finally {
+      setLoading(false);
+    }
+  };
+
 
   if (!isAuthenticated) {
     return (
@@ -588,25 +439,35 @@ export const AdminDashboard: React.FC = () => {
         ) : (
           <>
             {activeTab === 'leads' && (
-              <div className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden shadow-xl overflow-x-auto">
-                <table className="w-full text-left border-collapse">
-                  <thead>
-                    <tr className="bg-gray-800 text-gray-400 text-sm uppercase tracking-wider">
-                      <th className="p-4 font-semibold">{t.admin_col_date}</th>
-                      <th className="p-4 font-semibold">{t.admin_col_name}</th>
-                      <th className="p-4 font-semibold">{t.admin_col_company}</th>
-                      <th className="p-4 font-semibold">{t.admin_col_email}</th>
-                      <th className="p-4 font-semibold">{t.admin_col_phone}</th>
-                      <th className="p-4 font-semibold">{t.admin_col_interest}</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-800">
-                    {leads.length === 0 ? (
-                      <tr>
-                        <td colSpan={6} className="p-8 text-center text-gray-500">
-                          {t.admin_no_leads}
-                        </td>
+              <>
+                 <div className="flex justify-end mb-4">
+                    <button 
+                       onClick={() => handleExport('leads')}
+                       className="px-4 py-2 bg-blue-600 text-white font-bold rounded-lg hover:bg-blue-500 transition-colors"
+                       disabled={loading || leads.length === 0}
+                    >
+                       {t.admin_export_leads}
+                    </button>
+                 </div>
+                <div className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden shadow-xl overflow-x-auto">
+                  <table className="w-full text-left border-collapse">
+                    <thead>
+                      <tr className="bg-gray-800 text-gray-400 text-sm uppercase tracking-wider">
+                        <th className="p-4 font-semibold">{t.admin_col_date}</th>
+                        <th className="p-4 font-semibold">{t.admin_col_name}</th>
+                        <th className="p-4 font-semibold">{t.admin_col_company}</th>
+                        <th className="p-4 font-semibold">{t.admin_col_email}</th>
+                        <th className="p-4 font-semibold">{t.admin_col_phone}</th>
+                        <th className="p-4 font-semibold">{t.admin_col_interest}</th>
                       </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-800">
+                      {leads.length === 0 ? (
+                        <tr>
+                          <td colSpan={6} className="p-8 text-center text-gray-500">
+                            {t.admin_no_leads}
+                          </td>
+                        </tr>
                     ) : (
                       leads.map((lead) => (
                         <tr key={lead.id} className="hover:bg-gray-800/50 transition-colors">
@@ -621,32 +482,33 @@ export const AdminDashboard: React.FC = () => {
                             </a>
                           </td>
                           <td className="p-4 text-gray-400 text-sm">{lead.phone}</td>
-                          <td className="p-4 text-gray-300 text-sm">{lead.design_interest}</td>
+                          <td className="p-4 text-gray-300 text-sm capitalize">{lead.design_interest}</td>
                         </tr>
                       ))
                     )}
                   </tbody>
                 </table>
               </div>
+              </>
             )}
 
             {activeTab === 'designs' && (
               <>
                 {/* Search / Filter for Designs */}
-                <div className="bg-gray-900 border border-gray-800 rounded-xl p-4 mb-6 flex flex-wrap gap-4">
+                <div className="bg-gray-900 border border-gray-800 rounded-xl p-4 mb-6 flex flex-wrap gap-4 items-center">
                   <input
                     type="email"
                     placeholder={t.admin_search_email}
                     value={searchEmail}
                     onChange={(e) => setSearchEmail(e.target.value)}
-                    className="flex-1 min-w-[200px] bg-black/50 border border-gray-700 rounded-lg p-2 text-white focus:border-brand-green focus:outline-none"
+                    className="flex-1 min-w-[180px] bg-black/50 border border-gray-700 rounded-lg p-2 text-white focus:border-brand-green focus:outline-none"
                   />
                   <input
                     type="tel"
                     placeholder={t.admin_search_phone}
                     value={searchPhone}
                     onChange={(e) => setSearchPhone(e.target.value)}
-                    className="flex-1 min-w-[200px] bg-black/50 border border-gray-700 rounded-lg p-2 text-white focus:border-brand-green focus:outline-none"
+                    className="flex-1 min-w-[180px] bg-black/50 border border-gray-700 rounded-lg p-2 text-white focus:border-brand-green focus:outline-none"
                   />
                   <button 
                     onClick={fetchDesigns} 
@@ -654,6 +516,13 @@ export const AdminDashboard: React.FC = () => {
                     disabled={loading}
                   >
                     Search
+                  </button>
+                  <button 
+                     onClick={() => handleExport('designs')}
+                     className="px-4 py-2 bg-blue-600 text-white font-bold rounded-lg hover:bg-blue-500 transition-colors"
+                     disabled={loading || designs.length === 0}
+                  >
+                     {t.admin_export_designs}
                   </button>
                 </div>
 
@@ -716,7 +585,18 @@ export const AdminDashboard: React.FC = () => {
 
             {activeTab === 'templates' && (
               <>
-                <div className="flex justify-end mb-6">
+                <div className="flex justify-between items-center mb-6">
+                  <select
+                    value={filterTemplateCategory}
+                    onChange={(e) => setFilterTemplateCategory(e.target.value as TemplateCategory | 'all')}
+                    className="bg-black/50 border border-gray-700 rounded-lg p-2 text-white focus:border-brand-green focus:outline-none"
+                  >
+                    <option value="all">All Categories</option>
+                    {TEMPLATE_CATEGORIES.map(cat => (
+                      <option key={cat} value={cat}>{t[cat as keyof typeof t] as string}</option>
+                    ))}
+                  </select>
+
                   <button 
                     onClick={handleAddTemplate}
                     className="px-4 py-2 bg-brand-green text-black font-bold rounded-lg hover:bg-lime-500 transition-colors"
@@ -732,6 +612,7 @@ export const AdminDashboard: React.FC = () => {
                         <th className="p-4 font-semibold">{t.admin_col_id}</th>
                         <th className="p-4 font-semibold">{t.admin_col_type}</th>
                         <th className="p-4 font-semibold">{t.admin_col_style}</th>
+                        <th className="p-4 font-semibold">{t.admin_col_category}</th> {/* New column */}
                         <th className="p-4 font-semibold">{t.admin_col_keywords}</th>
                         <th className="p-4 font-semibold">{t.admin_col_prompt}</th>
                         <th className="p-4 font-semibold">{t.admin_col_thumbnail}</th>
@@ -742,7 +623,7 @@ export const AdminDashboard: React.FC = () => {
                     <tbody className="divide-y divide-gray-800">
                       {conceptualTemplates.length === 0 ? (
                         <tr>
-                          <td colSpan={8} className="p-8 text-center text-gray-500">
+                          <td colSpan={9} className="p-8 text-center text-gray-500">
                             {t.admin_no_templates}
                           </td>
                         </tr>
@@ -752,6 +633,7 @@ export const AdminDashboard: React.FC = () => {
                             <td className="p-4 text-gray-300 text-sm font-medium">{template.id}</td>
                             <td className="p-4 text-gray-400 text-sm capitalize">{template.type}</td>
                             <td className="p-4 text-gray-400 text-sm capitalize">{template.visualStyle}</td>
+                            <td className="p-4 text-gray-400 text-sm capitalize">{t[template.category as keyof typeof t] as string}</td> {/* Display category */}
                             <td className="p-4 text-gray-400 text-xs">{template.industryKeywords.join(', ')}</td>
                             <td className="p-4 text-gray-400 text-xs max-w-xs overflow-hidden text-ellipsis whitespace-nowrap">{template.promptHint}</td>
                             <td className="p-4">
@@ -834,6 +716,20 @@ export const AdminDashboard: React.FC = () => {
                               ))}
                             </select>
                           </div>
+                        </div>
+
+                        <div>
+                            <label className="block text-sm font-medium text-gray-400 mb-1">{t.admin_template_category}</label>
+                            <select 
+                              name="category"
+                              value={templateForm.category}
+                              onChange={handleTemplateFormChange}
+                              className="w-full bg-black/50 border border-gray-700 rounded-lg p-3 text-white focus:border-brand-green focus:outline-none"
+                            >
+                              {TEMPLATE_CATEGORIES.map(cat => (
+                                <option key={cat} value={cat}>{t[cat as keyof typeof t] as string}</option>
+                              ))}
+                            </select>
                         </div>
 
                         <div>
