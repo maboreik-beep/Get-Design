@@ -83,7 +83,7 @@ function App() {
   // UI State
   const [error, setError] = useState<string | null>(null);
 
-  // Polling ref for web draft updates
+  // Polling ref for web drafts
   const draftPollingIntervalRef = useRef<number | null>(null);
 
 
@@ -578,17 +578,9 @@ function App() {
            <div className="max-w-6xl mx-auto animate-fade-in pb-20">
               <button onClick={() => category === 'web' ? setStep('category-selection') : setStep('type-selection')} className="mb-6 text-gray-400 hover:text-white flex items-center gap-2"><span>←</span> Back</button>
               <h2 className="text-3xl font-bold text-center mb-4">Choose a Reference Style</h2>
-              <p className="text-center text-gray-400 mb-8">Select a style to inspire the AI generator, or skip to use default.</p>
+              <p className="text-center text-gray-400 mb-8">Select a style to inspire the AI generator.</p>
               
               <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
-                 {/* Default Option */}
-                 <div 
-                   onClick={() => handleTemplateSelect(null)} 
-                   className={`bg-gray-900 border-2 rounded-xl p-6 cursor-pointer transition-all flex items-center justify-center h-48 ${selectedTemplate === null ? 'border-brand-green' : 'border-gray-800 hover:border-gray-600'}`}
-                 >
-                    <span className="text-gray-300 font-bold">Let AI Decide (No Reference)</span>
-                 </div>
-
                  {relevantTemplates.map(tpl => (
                     <div 
                       key={tpl.id} 
