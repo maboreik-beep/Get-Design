@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef } from 'react'; 
 import { 
   DesignType, 
@@ -498,9 +497,9 @@ function App() {
   // Filter templates for current selection
   const relevantTemplates = templates.filter(t => {
       // Basic mapping, can be refined
-      if (designType === 'web') return t.category === 'website_design' || t.category === 'web';
+      if (designType === 'web') return t.category === 'website_design';
       if (designType === 'logo') return t.category === 'logo';
-      if (designType === 'social') return t.category === 'social_media' || t.category === 'social';
+      if (designType === 'social') return t.category === 'social_media';
       return true; // Show all for others or refine
   });
 
@@ -640,7 +639,12 @@ function App() {
               <div className="space-y-8">
                 {inputMode === 'zip' && (
                   <div className="bg-black/30 p-6 rounded-2xl border border-gray-800">
-                    <FileUpload<File> label={zipFile ? t.zip_uploaded_msg : t.upload_zip_label} onFileSelect={setZipFile} accept=".zip" returnFileObject={true} />
+                    <FileUpload<File> 
+                      label={zipFile ? t.zip_uploaded_msg : t.upload_zip_label} 
+                      onFileSelect={(f) => setZipFile(f as File | null)} 
+                      accept=".zip" 
+                      returnFileObject={true} 
+                    />
                   </div>
                 )}
 
@@ -648,7 +652,11 @@ function App() {
                   <>
                     <div className="grid grid-cols-2 gap-4">
                         <div className="col-span-2">
-                          <FileUpload<string> label={t.upload_label} onFileSelect={setLogoBase64} disabled={isDisabledForFormFields} />
+                          <FileUpload<string> 
+                            label={t.upload_label} 
+                            onFileSelect={(f) => setLogoBase64(f as string | null)} 
+                            disabled={isDisabledForFormFields} 
+                          />
                         </div>
                     </div>
                     <div className="grid md:grid-cols-2 gap-6">
