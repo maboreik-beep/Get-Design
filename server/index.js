@@ -123,6 +123,124 @@ initializeDatabase().catch(err => {
   process.exit(1);
 });
 
+// --- Helper: AI Generation Logic (Gemini 2.5) ---
+// Defined before usage to prevent ReferenceError
+async function handleAIGeneration(type, businessData, files, db) {
+  const apiKey = process.env.API_KEY;
+  if (!apiKey) throw new Error("API Key missing");
+
+  const ai = new GoogleGenAI({ apiKey });
+  
+  // Parse Business Data
+  const data = JSON.parse(businessData);
+  const { name, industry, description, visualStyle, customColorPalette, templateId } = data;
+
+  // Fetch Template Reference if exists
+  let referenceImagePart = null;
+  let referenceUrl = '';
+  if (templateId) {
+    const template = await db.get("SELECT * FROM Templates WHERE id = ?", templateId);
+    if (template) {
+      referenceUrl = template.url; // Use URL for WhatsApp reference
+      try {
+        // Fetch the image from URL to pass to Gemini
+        // Assuming template.thumbnail_url or template.url is a direct image link
+        const imgUrl = template.thumbnail_url || template.url;
+        const imgRes = await fetch(imgUrl);
+        if (imgRes.ok) {
+           const buffer = await imgRes.arrayBuffer();
+           referenceImagePart = {
+             inlineData: {
+               data: Buffer.from(buffer).toString('base64'),
+               mimeType: imgRes.headers.get('content-type') || 'image/jpeg'
+             }
+           };
+        }
+      } catch (e) {
+        console.error("Failed to fetch reference template image", e);
+      }
+    }
+  }
+
+  // Construct Prompt based on Type
+  let prompt = `Create a professional ${type} design for a business named "${name}". `;
+  if (industry) prompt += `Industry: ${industry}. `;
+  if (description) prompt += `Description: ${description}. `;
+  if (visualStyle) prompt += `Style: ${visualStyle}. `;
+  if (customColorPalette) prompt += `Colors: ${customColorPalette}. `;
+  
+  if (type === 'logo') {
+    prompt += "Generate a minimalist and scalable SVG code for the logo. Return ONLY the SVG code.";
+  } else if (type === 'web') {
+    prompt += "Generate a modern landing page structure using HTML and Tailwind CSS. Return ONLY the HTML code.";
+  } else {
+    prompt += "Describe the design concept in detail and provide a placeholder SVG visual.";
+  }
+
+  if (referenceImagePart) {
+    prompt += " I have attached a reference image. Please take inspiration from its style, layout, or vibe, but do not copy it directly.";
+  }
+
+  const parts = [];
+  if (referenceImagePart) parts.push(referenceImagePart);
+  parts.push({ text: prompt });
+
+  const modelName = 'gemini-2.5-flash'; 
+  const response = await ai.models.generateContent({
+    model: modelName,
+    contents: { parts },
+  });
+
+  let generatedText = response.text;
+  
+  // Basic cleanup to extract SVG/HTML if wrapped in markdown blocks
+  generatedText = generatedText.replace(/```(svg|html|xml)/g, '').replace(/```/g, '');
+
+  // For Web, create a task in DB
+  let designTaskId = null;
+  if (type === 'web') {
+     const result = await db.run(
+       "INSERT INTO DesignTasks (lead_id, type, status, request_details, reference_template_id) VALUES (?, ?, ?, ?, ?)",
+       data.contactId || null, 'web', 'pending', businessData, templateId || null
+     );
+     designTaskId = result.lastID;
+  } else if (data.contactId) {
+     // Log other requests too
+     await db.run(
+       "INSERT INTO DesignTasks (lead_id, type, status, request_details, reference_template_id) VALUES (?, ?, ?, ?, ?)",
+       data.contactId, type, 'completed', businessData, templateId || null
+     );
+  }
+
+  // If output is SVG, return it as data URL
+  let imageUrl = '';
+  if (generatedText.trim().startsWith('<svg') || generatedText.trim().startsWith('<!DOCTYPE html') || generatedText.trim().startsWith('<html')) {
+     imageUrl = `data:image/svg+xml;base64,${Buffer.from(generatedText).toString('base64')}`;
+     
+     if (type === 'web') {
+        // Returning the generic draft placeholder for now, but preserving the generated code in a real app would be key.
+        imageUrl = "data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iODAwIiBoZWlnaHQ9IjYwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMTAwJSIgaGVpZ2h0PSIxMDAlIiBmaWxsPSIjMTExIi8+PHRleHQgeD0iNTAlIiB5PSI1MCUiIGZpbGw9IiM3YmMxNDMiIGZvbnQtZmFtaWx5PSJzYW5zLXNlcmlmIiBmb250LXNpemU9IjMwIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIj5XZWJzaXRlIE1vY2t1cCBHZW5lcmF0ZWQ8L3RleHQ+PC9zdmc+"; 
+     }
+  } else {
+     // Fallback if AI returned text description
+     imageUrl = `data:image/svg+xml;base64,${Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 400"><text x="50%" y="50%" fill="white" font-size="20" text-anchor="middle">${generatedText.substring(0, 100)}...</text></svg>`).toString('base64')}`;
+  }
+
+  // IMPORTANT: For web tasks, return the DB ID so the frontend can poll properly
+  const returnId = designTaskId ? designTaskId.toString() : Date.now().toString();
+
+  return {
+    id: returnId,
+    status: type === 'web' ? 'initial_draft_placeholder' : 'ready',
+    imageUrl,
+    type,
+    data: data,
+    templateId,
+    templateLink: referenceUrl,
+    designTaskId
+  };
+}
+
 // --- Auth Middleware ---
 const authenticateToken = (req, res, next) => {
   const authHeader = req.headers['authorization'];
@@ -290,9 +408,6 @@ app.put('/api/tasks/:id', authenticateToken, requireRole(['admin', 'coordinator'
 app.post('/api/design-tasks', upload.any(), async (req, res) => {
   try {
     const { type, businessData } = req.body;
-    // We can also trigger the AI here if we want, or just save the task
-    // For consistency with the requested feature, we reuse the AI Logic but force it to create a task
-    
     const result = await handleAIGeneration(type, businessData, req.files, db);
     res.json(result);
   } catch (err) {
@@ -305,25 +420,9 @@ app.post('/api/design-tasks', upload.any(), async (req, res) => {
 app.get('/api/generated-designs/:id/status', async (req, res) => {
   const { id } = req.params;
   try {
-    // Check if it matches a task ID
-    // Note: The frontend uses the AI result 'id' which for web is a timestamp (string),
-    // but we saved a designTaskId (number) in the result.
-    // However, fetchDesignStatus sends the *whole* ID.
-    // If the ID is a timestamp, we might not find it in DB unless we stored it.
-    // For simplicity in this demo, we assume the frontend sends the Task ID if available, 
-    // OR we check the tasks table by ID.
-    
-    // In geminiService, fetchDesignStatus is called with draft.id. 
-    // draft.id comes from handleAIGeneration -> Date.now().toString().
-    // We need to link this.
-    
-    // Correction: In a real app, we should use the DB ID. 
-    // Here, we'll try to find a task where the ID matches OR just return the task status if the ID matches a task ID.
-    
     const task = await db.get("SELECT * FROM DesignTasks WHERE id = ?", id);
     
     if (task) {
-       // If we found a task, return its status
        let imageUrl = '';
        let status = 'initial_draft_placeholder';
 
@@ -332,7 +431,6 @@ app.get('/api/generated-designs/:id/status', async (req, res) => {
          imageUrl = task.output_url;
        } else if (task.status === 'in_progress') {
          status = 'generating_by_designer';
-         // Keep placeholder or show updated draft
          imageUrl = "data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iODAwIiBoZWlnaHQ9IjYwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMTAwJSIgaGVpZ2h0PSIxMDAlIiBmaWxsPSIjMjIyIi8+PHRleHQgeD0iNTAlIiB5PSI1MCUiIGZpbGw9IiM3YmMxNDMiIGZvbnQtZmFtaWx5PSJzYW5zLXNlcmlmIiBmb250LXNpemU9IjMwIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIj5EZXNpZ25lciBpcyB3b3JraW5nIG9uIGl0Li4uPC90ZXh0Pjwvc3ZnPg==";
        } else {
          // Default placeholder
@@ -342,11 +440,6 @@ app.get('/api/generated-designs/:id/status', async (req, res) => {
        return res.json({ imageUrl, status });
     }
     
-    // If not found (e.g. it was just a timestamp ID not saved as a task ID yet or client logic mismatch),
-    // return a default 'not found' or 'placeholder'.
-    // To fix the mismatch: In handleAIGeneration, we returned { id: Date.now(), designTaskId: ... }.
-    // The frontend should ideally poll using designTaskId.
-    // For now, allow 404 if not found.
     res.status(404).json({ error: "Design not found" });
 
   } catch (err) {
@@ -382,129 +475,6 @@ app.delete('/api/users/:id', authenticateToken, requireRole(['admin']), async (r
     res.json({ message: "User deleted" });
   } catch (err) { res.status(500).json({ error: "Delete failed" }); }
 });
-
-// 7. AI Generation Logic (Gemini 2.5)
-const handleAIGeneration = async (type, businessData, files, db) => {
-  const apiKey = process.env.API_KEY;
-  if (!apiKey) throw new Error("API Key missing");
-
-  const ai = new GoogleGenAI({ apiKey });
-  
-  // Parse Business Data
-  const data = JSON.parse(businessData);
-  const { name, industry, description, visualStyle, customColorPalette, templateId } = data;
-
-  // Fetch Template Reference if exists
-  let referenceImagePart = null;
-  let referenceUrl = '';
-  if (templateId) {
-    const template = await db.get("SELECT * FROM Templates WHERE id = ?", templateId);
-    if (template) {
-      referenceUrl = template.url; // Use URL for WhatsApp reference
-      try {
-        // Fetch the image from URL to pass to Gemini
-        // Assuming template.thumbnail_url or template.url is a direct image link
-        const imgUrl = template.thumbnail_url || template.url;
-        const imgRes = await fetch(imgUrl);
-        if (imgRes.ok) {
-           const buffer = await imgRes.arrayBuffer();
-           referenceImagePart = {
-             inlineData: {
-               data: Buffer.from(buffer).toString('base64'),
-               mimeType: imgRes.headers.get('content-type') || 'image/jpeg'
-             }
-           };
-        }
-      } catch (e) {
-        console.error("Failed to fetch reference template image", e);
-      }
-    }
-  }
-
-  // Construct Prompt based on Type
-  let prompt = `Create a professional ${type} design for a business named "${name}". `;
-  if (industry) prompt += `Industry: ${industry}. `;
-  if (description) prompt += `Description: ${description}. `;
-  if (visualStyle) prompt += `Style: ${visualStyle}. `;
-  if (customColorPalette) prompt += `Colors: ${customColorPalette}. `;
-  
-  if (type === 'logo') {
-    prompt += "Generate a minimalist and scalable SVG code for the logo. Return ONLY the SVG code.";
-  } else if (type === 'web') {
-    prompt += "Generate a modern landing page structure using HTML and Tailwind CSS. Return ONLY the HTML code.";
-  } else {
-    prompt += "Describe the design concept in detail and provide a placeholder SVG visual.";
-  }
-
-  if (referenceImagePart) {
-    prompt += " I have attached a reference image. Please take inspiration from its style, layout, or vibe, but do not copy it directly.";
-  }
-
-  const parts = [];
-  if (referenceImagePart) parts.push(referenceImagePart);
-  parts.push({ text: prompt });
-
-  const modelName = 'gemini-2.5-flash'; 
-  const response = await ai.models.generateContent({
-    model: modelName,
-    contents: { parts },
-  });
-
-  let generatedText = response.text;
-  
-  // Basic cleanup to extract SVG/HTML if wrapped in markdown blocks
-  generatedText = generatedText.replace(/```(svg|html|xml)/g, '').replace(/```/g, '');
-
-  // If it's a Logo or Web, we try to ensure it's valid code.
-  // For this demo, we assume Gemini returns code.
-  
-  // For Web, create a task in DB
-  let designTaskId = null;
-  if (type === 'web') {
-     const result = await db.run(
-       "INSERT INTO DesignTasks (lead_id, type, status, request_details, reference_template_id) VALUES (?, ?, ?, ?, ?)",
-       data.contactId || null, 'web', 'pending', businessData, templateId || null
-     );
-     designTaskId = result.lastID;
-  } else if (data.contactId) {
-     // Log other requests too
-     await db.run(
-       "INSERT INTO DesignTasks (lead_id, type, status, request_details, reference_template_id) VALUES (?, ?, ?, ?, ?)",
-       data.contactId, type, 'completed', businessData, templateId || null
-     );
-  }
-
-  // If output is SVG, return it as data URL
-  let imageUrl = '';
-  if (generatedText.trim().startsWith('<svg') || generatedText.trim().startsWith('<!DOCTYPE html') || generatedText.trim().startsWith('<html')) {
-     imageUrl = `data:image/svg+xml;base64,${Buffer.from(generatedText).toString('base64')}`;
-     
-     // Note: Browsers won't render HTML in an <img> tag data URL easily for complex sites, 
-     // but for logos (SVG) it works. For web, we might use a generic placeholder or a screenshot service.
-     if (type === 'web') {
-        // For web, we use a placeholder or specific screenshot logic.
-        // Returning the generic draft placeholder for now, but preserving the generated code in a real app would be key.
-        imageUrl = "data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iODAwIiBoZWlnaHQ9IjYwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMTAwJSIgaGVpZ2h0PSIxMDAlIiBmaWxsPSIjMTExIi8+PHRleHQgeD0iNTAlIiB5PSI1MCUiIGZpbGw9IiM3YmMxNDMiIGZvbnQtZmFtaWx5PSJzYW5zLXNlcmlmIiBmb250LXNpemU9IjMwIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIj5XZWJzaXRlIE1vY2t1cCBHZW5lcmF0ZWQ8L3RleHQ+PC9zdmc+"; 
-     }
-  } else {
-     // Fallback if AI returned text description
-     imageUrl = `data:image/svg+xml;base64,${Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 400"><text x="50%" y="50%" fill="white" font-size="20" text-anchor="middle">${generatedText.substring(0, 100)}...</text></svg>`).toString('base64')}`;
-  }
-
-  // IMPORTANT: For web tasks, return the DB ID so the frontend can poll properly
-  const returnId = designTaskId ? designTaskId.toString() : Date.now().toString();
-
-  return {
-    id: returnId,
-    status: type === 'web' ? 'initial_draft_placeholder' : 'ready',
-    imageUrl,
-    type,
-    data: data,
-    templateId,
-    templateLink: referenceUrl,
-    designTaskId
-  };
-};
 
 app.post('/api/generate-design', upload.any(), async (req, res) => {
   try {
