@@ -31,10 +31,14 @@ const __dirname = path.dirname(__filename);
 // Database setup
 // Use a persistent path for SQLite database on Render, e.g., /var/data/database.sqlite
 // If Render Disk is not configured, this will be ephemeral and reset on deploy/restart.
-const PERSISTENT_DATA_DIR = process.env.RENDER_DISK_PATH || path.join(__dirname, '..', 'data'); // Fallback to a 'data' folder at project root for local testing
+const PERSISTENT_DATA_DIR = process.env.RENDER_DISK_PATH || path.join(__dirname, '..', 'data'); 
 if (!fs.existsSync(PERSISTENT_DATA_DIR)) {
+  console.log(`Creating persistent data directory at: ${PERSISTENT_DATA_DIR}`);
   fs.mkdirSync(PERSISTENT_DATA_DIR, { recursive: true });
+} else {
+  console.log(`Using existing persistent data directory at: ${PERSISTENT_DATA_DIR}`);
 }
+
 const dbPath = path.join(PERSISTENT_DATA_DIR, 'database.sqlite');
 let db;
 
@@ -43,6 +47,7 @@ const GENERIC_WEB_DRAFT_SVG_DATA_URL = `data:image/svg+xml;base64,PHN2ZyB3aWR0aD
 
 
 async function initializeDatabase() {
+  console.log(`Initializing database at ${dbPath}...`);
   db = await open({
     filename: dbPath,
     driver: sqlite3.Database,
@@ -102,11 +107,13 @@ async function initializeDatabase() {
       FOREIGN KEY (generated_design_id) REFERENCES GeneratedDesigns(id)
     );
   `);
-  console.log('Database initialized.');
+  console.log('Database tables verified.');
 
   // Insert initial templates if the table is empty
   const templateCount = await db.get("SELECT COUNT(*) as count FROM ConceptualTemplates");
+  console.log(`Current template count: ${templateCount.count}`);
   if (templateCount.count === 0) {
+    console.log('Seeding initial templates...');
     await insertInitialTemplates();
   }
 }
@@ -122,7 +129,7 @@ async function insertInitialTemplates() {
       category: 'logo',
       industry_keywords: JSON.stringify(['tech', 'technology', 'software', 'startup', 'digital', 'innovation', 'IT', 'AI', 'data']),
       prompt_hint: 'Design a clean, abstract, geometric logo for a tech company. Focus on a simple, memorable icon, modern typography, and a fresh color palette. Minimalist layout with ample negative space.',
-      thumbnail_url: '/assets/templates/logo-L1-minimalist-tech.jpg', // Placeholder, replace with your direct link
+      thumbnail_url: 'https://placehold.co/600x400/0a0a0a/7bc143?text=Minimalist+Tech+Logo', 
       generated_content_examples: JSON.stringify({ headline: 'TechFlow Innovations', body: 'Streamlining Tomorrow, Today', cta: 'Explore Solutions' })
     },
     {
@@ -132,7 +139,7 @@ async function insertInitialTemplates() {
       category: 'logo',
       industry_keywords: JSON.stringify(['gaming', 'esports', 'entertainment', 'interactive', 'virtual reality']),
       prompt_hint: 'Create a bold, dynamic logo with an edgy mascot or icon for a gaming company. Use strong contrasts, energetic colors, and modern, aggressive typography. Emphasize speed, competition, and immersive experiences.',
-      thumbnail_url: '/assets/templates/logo-L2-bold-gaming.jpg', // Placeholder, replace with your direct link
+      thumbnail_url: 'https://placehold.co/600x400/1a1a1a/ff0000?text=Bold+Gaming+Logo', 
       generated_content_examples: JSON.stringify({ headline: 'Pixel Vanguard', body: 'Conquer Every Realm', cta: 'Join Now' })
     },
     // --- BRAND IDENTITY Templates ---
@@ -143,7 +150,7 @@ async function insertInitialTemplates() {
       category: 'brand_identity',
       industry_keywords: JSON.stringify(['luxury', 'fashion', 'jewelry', 'boutique', 'high-end', 'premium']),
       prompt_hint: 'Render an elegant and sophisticated brand identity kit flat-lay. Feature a refined logomark, classic serif typography, and a subdued color palette with metallic accents. Include items like embossed business cards, letterhead, and product packaging, highlighting quality and exclusivity.',
-      thumbnail_url: '/assets/templates/identity-BI1-elegant-luxury.jpg', // Placeholder, replace with your direct link
+      thumbnail_url: 'https://placehold.co/600x400/2c2c2c/gold?text=Luxury+Brand+Identity', 
       generated_content_examples: JSON.stringify({ headline: 'Eclat Couture', body: 'Redefining Opulence', cta: 'Discover Our Collection' })
     },
     {
@@ -153,7 +160,7 @@ async function insertInitialTemplates() {
       category: 'brand_identity',
       industry_keywords: JSON.stringify(['children', 'kids', 'toys', 'education', 'play', 'family']),
       prompt_hint: 'Design a whimsical and colorful brand identity kit flat-lay for a children\'s brand. Use a cheerful logotype with rounded letters, playful illustrations, and a bright color scheme. Items include fun business cards, stickers, and product tags, emphasizing joy and creativity.',
-      thumbnail_url: '/assets/templates/identity-BI2-playful-children.jpg', // Placeholder, replace with your direct link
+      thumbnail_url: 'https://placehold.co/600x400/ffffff/ff9900?text=Playful+Kids+Brand', 
       generated_content_examples: JSON.stringify({ headline: 'Curio Kids Club', body: 'Where Imagination Takes Flight', cta: 'Explore & Play' })
     },
     // --- SOCIAL MEDIA Templates ---
@@ -164,7 +171,7 @@ async function insertInitialTemplates() {
       category: 'social_media',
       industry_keywords: JSON.stringify(['corporate', 'business', 'consulting', 'finance', 'professional services']),
       prompt_hint: 'Create a clean, minimalist social media post template for a professional business. Use a neutral color palette with one accent color, clear sans-serif typography, and subtle geometric elements. Focus on a clear message with minimal clutter.',
-      thumbnail_url: '/assets/templates/social-SM1-minimalist-business.jpg', // Placeholder, replace with your direct link
+      thumbnail_url: 'https://placehold.co/600x600/f0f0f0/333333?text=Minimalist+Social+Post', 
       generated_content_examples: JSON.stringify({ headline: 'Elevate Your Strategy', body: 'Expert Insights for Growth', cta: 'Read Our Whitepaper' })
     },
     {
@@ -174,7 +181,7 @@ async function insertInitialTemplates() {
       category: 'social_media',
       industry_keywords: JSON.stringify(['fitness', 'gym', 'health', 'wellness', 'sports', 'training']),
       prompt_hint: 'Design a bold, high-energy social media post template for a fitness brand. Use strong action imagery, vibrant colors, and impactful, distressed typography. Emphasize strength, motivation, and results.',
-      thumbnail_url: '/assets/templates/social-SM2-bold-fitness.jpg', // Placeholder, replace with your direct link
+      thumbnail_url: 'https://placehold.co/600x600/000000/ffff00?text=Bold+Fitness+Post', 
       generated_content_examples: JSON.stringify({ headline: 'Unleash Your Power', body: 'Transform Your Body, Mind, and Spirit', cta: 'Start Your Journey' })
     },
     // --- BROCHURE/CATALOG Templates ---
@@ -186,7 +193,7 @@ async function insertInitialTemplates() {
       category: 'brochure_landscape',
       industry_keywords: JSON.stringify(['tech', 'software', 'AI', 'robotics', 'innovation', 'future']),
       prompt_hint: 'Design a multi-page landscape brochure with a futuristic and sleek aesthetic. Incorporate glowing lines, abstract geometric patterns, and a dark theme. Use modern sans-serif fonts and clean data visualization elements. Emphasize innovation and advanced technology.',
-      thumbnail_url: '/assets/templates/brochure-BL1-futuristic-tech.jpg', // Placeholder, replace with your direct link
+      thumbnail_url: 'https://placehold.co/800x450/050505/00ffff?text=Futuristic+Tech+Brochure', 
       generated_content_examples: JSON.stringify({ headline: 'Pioneering Tomorrow\'s Solutions', body: 'Our advanced technological platforms are engineered to deliver unparalleled efficiency, driving your enterprise into a new era of digital excellence and innovation.', cta: 'Request a Live Demo' })
     },
     {
@@ -196,7 +203,7 @@ async function insertInitialTemplates() {
       category: 'brochure_landscape',
       industry_keywords: JSON.stringify(['travel', 'tourism', 'luxury resort', 'vacation', 'hospitality', 'destinations']),
       prompt_hint: 'Create an elegant landscape brochure for a luxury travel agency. Feature stunning photography of exotic destinations, sophisticated serif typography, and a spacious layout. Use a serene color palette with hints of gold, conveying relaxation and exclusivity.',
-      thumbnail_url: '/assets/templates/brochure-BL2-elegant-travel.jpg', // Placeholder, replace with your direct link
+      thumbnail_url: 'https://placehold.co/800x450/ffffff/0066cc?text=Elegant+Travel+Brochure', 
       generated_content_examples: JSON.stringify({ headline: 'Your Journey, Reimagined', body: 'Indulge in bespoke travel experiences meticulously crafted to inspire, enchant, and create indelible memories across the globe.', cta: 'Book Your Escape' })
     },
     // Brochure-Catalog-Portrait
@@ -207,7 +214,7 @@ async function insertInitialTemplates() {
       category: 'brochure_portrait',
       industry_keywords: JSON.stringify(['corporate', 'consulting', 'business', 'finance', 'legal']),
       prompt_hint: 'Design a clean, minimalist portrait brochure for a corporate consulting firm. Use a professional blue/grey color scheme, crisp sans-serif typography, and a structured layout with clear sections. Focus on conveying professionalism and clarity.',
-      thumbnail_url: '/assets/templates/brochure-BP1-minimalist-corporate.jpg', // Placeholder, replace with your direct link
+      thumbnail_url: 'https://placehold.co/450x800/e6e6e6/003366?text=Corporate+Portrait+Brochure', 
       generated_content_examples: JSON.stringify({ headline: 'Strategic Partnership for Success', body: 'We provide tailored consulting services designed to optimize your operations, enhance market position, and drive sustainable business growth.', cta: 'Schedule a Consultation' })
     },
     {
@@ -217,7 +224,7 @@ async function insertInitialTemplates() {
       category: 'brochure_portrait',
       industry_keywords: JSON.stringify(['education', 'school', 'university', 'learning', 'kids', 'youth']),
       prompt_hint: 'Create a vibrant, playful portrait brochure for an educational institution. Use a bright, inviting color palette, engaging illustrations, and fun, readable typography. Design for a young audience, emphasizing discovery and interactive learning.',
-      thumbnail_url: '/assets/templates/brochure-BP2-playful-education.jpg', // Placeholder, replace with your direct link
+      thumbnail_url: 'https://placehold.co/450x800/ffffff/ff3399?text=Playful+Education+Brochure', 
       generated_content_examples: JSON.stringify({ headline: 'Ignite a Passion for Learning', body: 'Our innovative programs and dedicated educators foster a dynamic environment where students thrive, explore, and achieve their fullest potential.', cta: 'Enroll Today' })
     },
     // Tri-Fold Flyer
@@ -228,7 +235,7 @@ async function insertInitialTemplates() {
       category: 'tri_fold_flyer',
       industry_keywords: JSON.stringify(['marketing', 'advertising', 'agency', 'promotion', 'sales']),
       prompt_hint: 'Design a bold and impactful tri-fold flyer for a marketing agency. Use strong visuals, contrasting colors, and energetic typography to grab attention. Structure clearly defined sections for services, benefits, and contact information.',
-      thumbnail_url: '/assets/templates/brochure-TF1-bold-marketing.jpg', // Placeholder, replace with your direct link
+      thumbnail_url: 'https://placehold.co/600x400/000000/ffcc00?text=Bold+Marketing+Flyer', 
       generated_content_examples: JSON.stringify({ headline: 'Supercharge Your Brand', body: 'Unlock unparalleled visibility and engagement with our innovative marketing strategies, designed to connect you with your audience and drive measurable results.', cta: 'Get Your Free Audit' })
     },
     // --- WEB DESIGN Templates ---
@@ -239,7 +246,7 @@ async function insertInitialTemplates() {
       category: 'website_design',
       industry_keywords: JSON.stringify(['software', 'cloud', 'AI', 'SaaS', 'platform', 'startup', 'web development']),
       prompt_hint: 'Design a responsive website layout with a futuristic, dark mode aesthetic. Incorporate glowing UI elements, abstract backgrounds, and modern sans-serif typography. Focus on clean data presentation, intuitive navigation, and engaging hero sections for a software product.',
-      thumbnail_url: '/assets/templates/web-W1-futuristic-software.jpg', // Placeholder, replace with your direct link
+      thumbnail_url: 'https://placehold.co/800x450/000033/00ccff?text=Futuristic+Software+Web', 
       generated_content_examples: JSON.stringify({ headline: 'Next-Gen AI Platform', body: 'Empower your business with intelligent automation and data-driven insights, seamlessly integrated into your workflow for unprecedented efficiency.', cta: 'Start Free Trial' })
     },
     {
@@ -249,7 +256,7 @@ async function insertInitialTemplates() {
       category: 'website_design',
       industry_keywords: JSON.stringify(['photography', 'art', 'portfolio', 'creative', 'gallery', 'artist']),
       prompt_hint: 'Create an elegant and minimalist website layout for a professional photography portfolio. Emphasize large, high-quality image displays, subtle hover effects, and sophisticated serif typography. Use a clean, monochromatic color scheme to let the visuals speak. Showcase work with grace and impact.',
-      thumbnail_url: '/assets/templates/web-W2-elegant-photography.jpg', // Placeholder, replace with your direct link
+      thumbnail_url: 'https://placehold.co/800x450/111111/ffffff?text=Elegant+Portfolio+Web', 
       generated_content_examples: JSON.stringify({ headline: 'Capturing Moments, Creating Art', body: 'Discover a curated collection of evocative imagery, each frame a testament to the beauty and emotion found in every moment.', cta: 'View Portfolio' })
     },
   ];
