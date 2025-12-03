@@ -8,7 +8,7 @@
   },
   "scripts": {
     "dev": "vite",
-    "build": "./node_modules/.bin/vite build",
+    "build": "vite build",
     "preview": "vite preview",
     "start": "node server/index.js"
   },
