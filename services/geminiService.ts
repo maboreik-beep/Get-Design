@@ -1,7 +1,7 @@
 
 // services/geminiService.ts
 import { BusinessData, DesignType, GeneratedResult, GeneratedResultStatus } from '../types';
-import { GENERIC_WEB_DRAFT_SVG_DATA_URL } from '../constants'; // Import the new constant
+// Removed unused import: GENERIC_WEB_DRAFT_SVG_DATA_URL
 
 /**
  * Centralized error handler for fetch API responses from backend.
@@ -31,10 +31,11 @@ export async function generateDesign(
   formData.append('type', designType);
   formData.append('businessData', JSON.stringify(businessData));
 
-  if (zipFile) {
+  // Explicitly use inputMode for clarity and to resolve TS6133
+  if (inputMode === 'zip' && zipFile) { 
     formData.append('zipFile', zipFile);
     onStatusUpdate("Uploading assets from ZIP...");
-  } else {
+  } else if (inputMode === 'form') {
     // Only append logoBase64 and brochureBase64 if in form mode
     if (logoBase64) {
       formData.append('logoBase64', logoBase64);
