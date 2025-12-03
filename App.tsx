@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef } from 'react'; 
 import { 
   DesignType, 
@@ -48,7 +49,8 @@ function App() {
     socialPlatform: 'instagram', 
     customColorPalette: '', 
     visualStyle: 'minimalist', 
-    postContent: '' 
+    postContent: '',
+    templateId: undefined
   });
 
   // Templates
@@ -86,6 +88,12 @@ function App() {
   // Polling ref for web drafts
   const draftPollingIntervalRef = useRef<number | null>(null);
 
+  // Define loadFromHistory helper
+  const loadFromHistory = (design: GeneratedResult) => {
+    setGeneratedResult(design);
+    setStep('result');
+    setCurrentImageIndex(0);
+  };
 
   // --- Effects ---
   useEffect(() => {
@@ -154,576 +162,438 @@ function App() {
     );
 
     if (webPendingDrafts.length > 0) {
+      // @ts-ignore
       draftPollingIntervalRef.current = setInterval(async () => {
         for (const draft of webPendingDrafts) {
           if (draft.designTaskId && (draft.status === 'initial_draft_placeholder' || draft.status === 'ai_draft_generated')) {
             try {
               const { imageUrl, status } = await fetchDesignStatus(draft.id as unknown as number);
               if (status !== draft.status || imageUrl !== draft.imageUrl) {
-                setHistory(prevHistory => prevHistory.map(item => 
-                  item.id === draft.id ? { ...item, imageUrl, status } : item
-                ));
-                if (generatedResult?.id === draft.id) {
-                  setGeneratedResult(prev => prev ? { ...prev, imageUrl, status } : null);
-                }
+                 const updatedHistory = history.map(h => 
+                    h.id === draft.id ? { ...h, status, imageUrl } : h
+                 );
+                 setHistory(updatedHistory);
+                 localStorage.setItem('design_history', JSON.stringify(updatedHistory));
+
+                 // Update current view if viewing this design
+                 if (generatedResult && generatedResult.id === draft.id) {
+                    setGeneratedResult(prev => prev ? { ...prev, status, imageUrl } : null);
+                 }
               }
-            } catch (err) {
-              console.error(`Failed to poll status for design ${draft.id}:`, err);
+            } catch (e) {
+               console.error("Polling error", e);
             }
           }
         }
-      }, 15000) as unknown as number; 
+      }, 5000);
     }
 
     return () => {
-      if (draftPollingIntervalRef.current !== null) {
+      if (draftPollingIntervalRef.current) {
         clearInterval(draftPollingIntervalRef.current);
       }
     };
   }, [history, generatedResult]);
 
-
-  const isDisabledForFormFields = inputMode === 'zip';
-
   // --- Handlers ---
-
-  const handleCategorySelect = (cat: 'graphics' | 'web') => {
-    setCategory(cat);
-    if (cat === 'web') {
-      setDesignType('web');
-      setStep('template-selection'); // Go to template selection first
-      setBusinessData(prev => ({ ...prev, selectedPages: ["Home", "About Us", "Services", "Contact"] }));
-    } else {
-      setStep('type-selection');
-    }
+  const handleInputChange = (field: keyof BusinessData, value: any) => {
+    setBusinessData(prev => ({ ...prev, [field]: value }));
   };
 
-  const handleTypeSelect = (type: DesignType) => {
-    setDesignType(type);
-    setStep('template-selection'); // Go to template selection first
-    if (type === 'brochure') {
-      setBusinessData(prev => ({...prev, brochureOrientation: 'portrait', brochurePageCount: 4, brochureSize: 'a4'}));
-    }
-    if (type === 'social') {
-      setBusinessData(prev => ({...prev, socialPlatform: 'instagram'}));
-    }
-    if (type === 'logo') {
-      setBusinessData(prev => ({...prev, logoStyle: '3d'}));
-    }
-  };
-
-  const handleTemplateSelect = (template: Template | null) => {
+  const handleTemplateSelect = (template: Template) => {
     setSelectedTemplate(template);
-    setBusinessData(prev => ({ ...prev, templateId: template?.id }));
+    setBusinessData(prev => ({ ...prev, templateId: template.id }));
     setStep('input-form');
   };
 
-  const handlePageToggle = (page: string) => {
-    setBusinessData(prev => {
-      const current = prev.selectedPages || [];
-      if (current.includes(page)) {
-        return { ...prev, selectedPages: current.filter(p => p !== page) };
-      } else {
-        if (current.length >= 5) return prev; 
-        return { ...prev, selectedPages: [...current, page] };
-      }
-    });
-  };
-
-  const handleGenerateClick = () => {
-    if (inputMode === 'form') {
-      if (!businessData.name) {
-        setError(lang === 'en' ? "Please fill in Business Name." : "يرجى إدخال اسم النشاط.");
-        return;
-      }
-      if (designType === 'web' && (!businessData.selectedPages || businessData.selectedPages.length === 0)) {
-        setError(lang === 'en' ? "Please select at least one page." : "يرجى اختيار صفحة واحدة على الأقل.");
-        return;
-      }
-    } else if (inputMode === 'zip') {
-      if (!zipFile) {
-        setError(t.validation_zip_req);
-        return;
-      }
-    }
-    setError(null);
-
-    if (contactDetails.name && contactDetails.email && contactDetails.company && contactDetails.phone) {
-      processGeneration();
-    } else {
-      setShowContactModal(true);
-    }
-  };
-
-  const validateContactForm = (): boolean => {
-    const errors: Partial<Record<keyof ContactDetails, string>> = {};
-    let isValid = true;
-
-    if (!contactDetails.name.trim()) { errors.name = t.validation_name_req; isValid = false; }
-    if (!contactDetails.company.trim()) { errors.company = t.validation_company_req; isValid = false; }
-    if (!contactDetails.email.trim()) { errors.email = t.validation_email_req; isValid = false; }
-    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(contactDetails.email)) { errors.email = t.validation_email; isValid = false; }
-    if (!contactDetails.phone.trim()) { errors.phone = t.validation_phone_req; isValid = false; }
-    else if (!/^\+?[\d\s-]{8,}$/.test(contactDetails.phone)) { errors.phone = t.validation_phone; isValid = false; }
-
+  const validateContact = () => {
+    const errors: any = {};
+    if (!contactDetails.name) errors.name = t.validation_name_req;
+    if (!contactDetails.company) errors.company = t.validation_company_req;
+    if (!contactDetails.email) errors.email = t.validation_email_req;
+    if (!contactDetails.phone) errors.phone = t.validation_phone_req;
     setValidationErrors(errors);
-    return isValid;
+    return Object.keys(errors).length === 0;
   };
 
-  const handleContactSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!validateContactForm()) return;
-
-    try {
-      const response = await fetch('/api/contact', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: contactDetails.name,
-          company: contactDetails.company,
-          email: contactDetails.email,
-          phone: contactDetails.phone,
-          design_interest: designType, 
-        })
-      });
-
-      const responseData = await response.json();
-      if (!response.ok) throw new Error(responseData.error || t.error_generic);
-      
-      const { id: contactId } = responseData; 
-      const updatedContactDetails = { ...contactDetails, id: contactId };
-      setContactDetails(updatedContactDetails);
-      localStorage.setItem('contact_details', JSON.stringify(updatedContactDetails));
-      setBusinessData(prev => ({ ...prev, contactId: contactId }));
-      setShowContactModal(false);
-      processGeneration();
-
-    } catch (err: any) {
-      console.error("Contact submission failed:", err);
-      setError(err.message || t.error_generic);
-    }
-  };
-
-  const processGeneration = async () => {
-    setStep('generating');
-    setLoadingStatus(t.generating); 
-    setError(null);
-    setCurrentImageIndex(0);
-
-    try {
-      const dataForBackend: BusinessData = {
-        ...businessData,
-        contactId: contactDetails.id, 
-        brochureBase64: brochureBase64,
-        templateId: selectedTemplate?.id // Pass selected template ID
-      };
-
-      const result = await generateDesign(
-        designType,
-        inputMode === 'form' ? 'form' : 'zip', 
-        dataForBackend,
-        inputMode === 'form' ? (logoBase64 || null) : null,
-        (status) => setLoadingStatus(status), 
-        inputMode === 'zip' ? zipFile : null 
-      );
-
-      // Enriched result with selected template info if available for UI consistency
-      const enrichedResult = {
-        ...result,
-        templateLink: result.templateLink || selectedTemplate?.url
-      };
-
-      setGeneratedResult(enrichedResult);
-      
-      const MAX_HISTORY_ITEMS = 3; 
-      let newHistory = [enrichedResult, ...history];
-      if (newHistory.length > MAX_HISTORY_ITEMS) newHistory = newHistory.slice(0, MAX_HISTORY_ITEMS);
-      setHistory(newHistory);
-      localStorage.setItem('design_history', JSON.stringify(newHistory));
-
-      setStep('result');
-    } catch (err: any) {
-      console.error(err);
-      setError(err.message || t.error_generic);
-      setStep('input-form');
-    }
-  };
-
-  const createBrandedImageBlob = async (imageUrl: string): Promise<Blob | null> => {
-    if (imageUrl === GENERIC_WEB_DRAFT_SVG_DATA_URL || imageUrl === '') return null;
-    try {
-      const img = new Image();
-      img.crossOrigin = "anonymous";
-      img.src = imageUrl;
-      await new Promise(r => img.onload = r);
-
-      const canvas = document.createElement('canvas');
-      const ctx = canvas.getContext('2d');
-      if(!ctx) return null;
-
-      const HEADER_HEIGHT = 100;
-      canvas.width = img.width;
-      canvas.height = img.height + HEADER_HEIGHT;
-
-      ctx.fillStyle = '#000000';
-      ctx.fillRect(0, 0, canvas.width, HEADER_HEIGHT);
-
-      ctx.textAlign = 'center';
-      const centerX = canvas.width / 2;
-
-      ctx.font = '300 12px Inter, sans-serif';
-      ctx.fillStyle = '#9ca3af'; 
-      ctx.fillText('NOW', centerX, 30);
-
-      const textY = 60;
-      ctx.font = 'bold 28px Inter, sans-serif';
-      ctx.fillStyle = '#ffffff';
-      ctx.fillText('Get', centerX - 40, textY);
-      ctx.font = '300 28px Inter, sans-serif';
-      ctx.fillText('Design', centerX + 30, textY);
-
-      const iconX = centerX + 100;
-      const iconY = 40;
-      ctx.beginPath();
-      ctx.moveTo(iconX, iconY);
-      ctx.lineTo(iconX + 20, iconY + 12);
-      ctx.lineTo(iconX, iconY + 24);
-      ctx.closePath();
-      ctx.fillStyle = '#7bc143';
-      ctx.fill();
-
-      ctx.drawImage(img, 0, HEADER_HEIGHT);
-      return new Promise(resolve => canvas.toBlob(blob => resolve(blob), 'image/png'));
-    } catch (e) { return null; }
-  };
-
-  const handleWhatsAppRequest = async (result: GeneratedResult) => {
-    const contact = contactDetails;
-    let message = "";
-
-    if (!result.imageUrl || result.status !== 'ready') { 
-      alert(lang === 'en' ? "This design is not yet ready." : "هذا التصميم ليس جاهزًا بعد.");
-      return;
-    }
-
-    // Append Template Info to WhatsApp Message
-    const templateInfo = selectedTemplate 
-      ? `\nReference Style: ${selectedTemplate.title} (${selectedTemplate.category})`
-      : "";
-
-    if (result.type === 'web') {
-      message = `Hi, I am ${contact.name} from ${contact.company}. I am interested to publish this website design concept.${templateInfo}\nI want to move from Mockup to Real Website on WordPress.`;
-    } else {
-      message = `Hi, I am ${contact.name} from ${contact.company}. I am interested to get the files for this design.${templateInfo}`;
-    }
+  const handleContactSubmit = async () => {
+    if (!validateContact()) return;
     
-    const imageToShareUrl = ((result.type === 'web' || result.type === 'brochure') && result.images && result.images.length > 0) 
-        ? result.images[currentImageIndex] 
-        : result.imageUrl;
+    // Save contact
+    try {
+        const res = await fetch('/api/contact', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+              ...contactDetails,
+              design_interest: designType // Pass design type as interest
+            })
+        });
+        
+        if (!res.ok) throw new Error("Failed to save contact");
+        
+        const data = await res.json();
+        const contactId = data.id;
+        
+        localStorage.setItem('contact_details', JSON.stringify(contactDetails));
+        setShowContactModal(false);
+        startGeneration(contactId);
+
+    } catch (e) {
+        console.error("Contact submit error:", e);
+        setError(t.error_generic);
+        setShowContactModal(false); // Close modal to show error on main screen
+    }
+  };
+
+  const startGeneration = async (contactId?: number) => {
+    setStep('generating');
+    setLoadingStatus(t.generating);
+    setError(null);
 
     try {
-        const blob = await createBrandedImageBlob(imageToShareUrl);
-        if (blob) {
-            const url = URL.createObjectURL(blob);
-            const link = document.createElement('a');
-            link.href = url;
-            link.download = `GetDesign_Request_${result.id}.png`;
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
-            URL.revokeObjectURL(url);
-            alert(lang === 'en' ? "Image downloaded. Please attach to WhatsApp." : "تم تحميل الصورة. يرجى إرفاقها في واتساب.");
-        }
-    } catch (e) { console.error("Auto-download failed", e); }
+        const finalData = { ...businessData, contactId };
+        
+        const result = await generateDesign(
+            designType,
+            inputMode,
+            finalData,
+            logoBase64,
+            setLoadingStatus,
+            zipFile
+        );
 
-    const url = `https://wa.me/${SUPPORT_NUMBER}?text=${encodeURIComponent(message)}`;
-    window.open(url, '_blank');
-  };
+        setGeneratedResult(result);
+        setHistory(prev => {
+            const newHistory = [result, ...prev];
+            localStorage.setItem('design_history', JSON.stringify(newHistory));
+            return newHistory;
+        });
+        setStep('result');
+        setCurrentImageIndex(0);
 
-  const handleShare = async (result: GeneratedResult) => {
-    if (!result.imageUrl || result.status !== 'ready') return;
-    const shareText = t.share_text_template; 
-    const url = 'https://getdesign.cloud';
-    const imageToShareUrl = ((result.type === 'web' || result.type === 'brochure') && result.images && result.images.length > 0) ? result.images[currentImageIndex] : result.imageUrl;
-    const blob = await createBrandedImageBlob(imageToShareUrl);
-    let filesArray: File[] = [];
-    if (blob) {
-      const file = new File([blob], `getdesign_${result.id}.png`, { type: blob.type });
-      filesArray = [file];
-    }
-    const shareData: ShareData = { title: 'Get Design AI', text: `${shareText}\n${url}`, url: url };
-    if (navigator.share) {
-      try {
-        if (filesArray.length > 0 && navigator.canShare && navigator.canShare({ files: filesArray })) await navigator.share({ ...shareData, files: filesArray });
-        else await navigator.share(shareData);
-      } catch (err) { console.warn('Share failed', err); }
-    } else {
-      navigator.clipboard.writeText(`${shareText}\n${url}`);
-      alert(t.share_copied);
+    } catch (err: any) {
+        console.error(err);
+        setError(err.message || t.error_generic);
+        setStep('input-form');
     }
   };
 
-  const handleDownload = async (imageUrl: string, filename: string) => {
-    if (imageUrl === GENERIC_WEB_DRAFT_SVG_DATA_URL || imageUrl === '' || generatedResult?.status !== 'ready') return;
-    const blob = await createBrandedImageBlob(imageUrl);
-    if (blob) {
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = filename;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      URL.revokeObjectURL(url);
-    } else {
-      const link = document.createElement('a');
-      link.href = imageUrl;
-      link.download = filename;
-      link.click();
+  const initiateGeneration = () => {
+    // Validate Business Data
+    if (!businessData.name) {
+        alert("Business Name is required");
+        return;
     }
+    setShowContactModal(true);
   };
 
-  const loadFromHistory = (item: GeneratedResult) => {
-    setGeneratedResult(item);
-    setBusinessData(item.data);
-    setDesignType(item.type);
-    setCategory(item.type === 'web' ? 'web' : 'graphics');
-    // We don't restore the selected template object fully, but we have ID
-    setStep('result');
-    setShowHistory(false);
-    setCurrentImageIndex(0);
-  };
-
-  // Filter templates for current selection
+  // Filter templates based on category or type mapping
   const relevantTemplates = templates.filter(t => {
-      // Basic mapping, can be refined
-      if (designType === 'web') return t.category === 'website_design';
+      if (category === 'web') return t.category === 'website_design';
       if (designType === 'logo') return t.category === 'logo';
       if (designType === 'social') return t.category === 'social_media';
-      return true; // Show all for others or refine
+      if (designType === 'brochure') return t.category.includes('brochure') || t.category.includes('flyer');
+      return true;
   });
 
+  // --- Render ---
   if (isAdmin) {
-    return <AdminDashboard PUBLIC_APP_URL={process.env.PUBLIC_APP_URL || 'https://www.getdesign.cloud'} />;
+    return <AdminDashboard PUBLIC_APP_URL={process.env.PUBLIC_APP_URL || ''} />;
   }
 
   return (
-    <div className={`min-h-screen flex flex-col font-sans text-white ${isRTL ? 'font-arabic' : ''}`} dir={isRTL ? 'rtl' : 'ltr'}>
-      <header className="border-b border-gray-800 bg-black/80 backdrop-blur-md sticky top-0 z-50">
-        <div className="container mx-auto px-6 py-4 flex justify-between items-center">
-          <div onClick={() => { setStep('category-selection'); setCategory(null); }} className="cursor-pointer">
-             <Logo />
-          </div>
-          <div className="flex items-center gap-4">
-             <button onClick={() => setLang(lang === 'en' ? 'ar' : 'en')} className="text-gray-400 hover:text-white transition-colors text-sm font-semibold uppercase">
-               {lang === 'en' ? 'العربية' : 'English'}
-             </button>
-             <button onClick={() => setShowHistory(true)} className="flex items-center gap-2 px-3 py-2 bg-gray-900 border border-gray-800 rounded-lg hover:border-brand-green hover:text-brand-green transition-all">
-               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-               <span className="hidden sm:inline font-medium text-sm">{t.my_creations}</span>
-             </button>
-          </div>
+    <div className={`min-h-screen bg-black text-white font-sans ${isRTL ? 'rtl' : 'ltr'}`} dir={isRTL ? 'rtl' : 'ltr'}>
+      {/* Header */}
+      <header className="absolute top-0 left-0 w-full z-20 p-6 flex justify-between items-center">
+        <Logo />
+        <div className="flex gap-4">
+            <button onClick={() => setLang(l => l === 'en' ? 'ar' : 'en')} className="text-sm font-bold bg-gray-800 hover:bg-gray-700 px-3 py-1 rounded-full transition-colors border border-gray-700">
+                {lang === 'en' ? '🇨🇦 EN' : '🇸🇦 AR'}
+            </button>
+            <button onClick={() => setShowHistory(!showHistory)} className="text-sm font-bold bg-brand-green text-black px-4 py-1 rounded-full hover:bg-opacity-90 transition-colors">
+                {t.my_creations}
+            </button>
         </div>
       </header>
 
-      <main className="flex-grow container mx-auto px-4 py-8 relative z-10">
+      {/* Main Content Area */}
+      <main className="container mx-auto px-4 pt-24 pb-12 min-h-screen flex flex-col items-center justify-center relative">
+        
+        {/* Error Display */}
         {error && (
-          <div className="mb-6 p-4 bg-red-900/50 border border-red-700 text-red-100 rounded-lg animate-fade-in flex items-center justify-between">
-            <span>{error}</span>
-            <button onClick={() => setError(null)} className="text-red-300 hover:text-white">&times;</button>
-          </div>
-        )}
-
-        {/* STEP 1: CATEGORY SELECTION */}
-        {step === 'category-selection' && (
-          <div className="max-w-4xl mx-auto animate-fade-in">
-            <h1 className="text-4xl font-bold text-center mb-4"><span className="text-brand-green">AI</span> Creative Suite</h1>
-            <p className="text-gray-400 text-center mb-12 text-lg">{t.subtitle}</p>
-            <div className="grid md:grid-cols-2 gap-8">
-              <div onClick={() => handleCategorySelect('graphics')} className="group relative h-80 bg-gray-900/60 backdrop-blur-sm rounded-2xl border border-gray-800 hover:border-brand-green overflow-hidden cursor-pointer transition-all shadow-2xl">
-                <div className="absolute inset-0 bg-gradient-to-br from-brand-green/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
-                <div className="absolute inset-0 flex flex-col items-center justify-center p-8 text-center z-10">
-                   <h2 className="text-3xl font-bold mb-2">{t.cat_graphics}</h2>
-                   <p className="text-gray-400 group-hover:text-gray-200">Logos, Identity, Social Media</p>
-                </div>
-              </div>
-              <div onClick={() => handleCategorySelect('web')} className="group relative h-80 bg-gray-900/60 backdrop-blur-sm rounded-2xl border border-gray-800 hover:border-blue-500 overflow-hidden cursor-pointer transition-all shadow-2xl">
-                <div className="absolute inset-0 bg-gradient-to-bl from-blue-500/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
-                 <div className="absolute inset-0 flex flex-col items-center justify-center p-8 text-center z-10">
-                   <h2 className="text-3xl font-bold mb-2">{t.cat_web}</h2>
-                   <p className="text-gray-400 group-hover:text-gray-200">Full Website Template Kits</p>
-                </div>
-              </div>
+            <div className="absolute top-24 z-50 animate-fade-in bg-red-900/80 border border-red-500 text-white px-6 py-4 rounded-xl shadow-2xl backdrop-blur-md max-w-md text-center">
+                <p className="font-bold mb-1">⚠️ Error</p>
+                <p className="text-sm opacity-90">{error}</p>
+                <button onClick={() => setError(null)} className="mt-2 text-xs underline hover:text-white">Dismiss</button>
             </div>
-          </div>
         )}
 
-        {/* STEP 2: TYPE SELECTION */}
-        {step === 'type-selection' && category === 'graphics' && (
-          <div className="max-w-6xl mx-auto animate-fade-in">
-             <button onClick={() => setStep('category-selection')} className="mb-8 text-gray-400 hover:text-white flex items-center gap-2"><span>←</span> {t.back_to_menu}</button>
-            <h2 className="text-3xl font-bold text-center mb-10">{t.select_type}</h2>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
-              {[{ id: 'logo', label: t.type_logo }, { id: 'identity', label: t.type_identity }, { id: 'social', label: t.type_social }, { id: 'brochure', label: t.type_brochure }].map((item) => (
-                <div key={item.id} onClick={() => handleTypeSelect(item.id as DesignType)} className="bg-gray-900/60 border border-gray-800 hover:border-brand-green rounded-xl p-6 cursor-pointer transition-all text-center group">
-                  <h3 className="font-semibold text-lg">{item.label}</h3>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* STEP 2.5: TEMPLATE SELECTION (NEW) */}
-        {step === 'template-selection' && (
-           <div className="max-w-6xl mx-auto animate-fade-in pb-20">
-              <button onClick={() => category === 'web' ? setStep('category-selection') : setStep('type-selection')} className="mb-6 text-gray-400 hover:text-white flex items-center gap-2"><span>←</span> Back</button>
-              <h2 className="text-3xl font-bold text-center mb-4">Choose a Reference Style</h2>
-              <p className="text-center text-gray-400 mb-8">Select a style to inspire the AI generator.</p>
-              
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
-                 {relevantTemplates.map(tpl => (
-                    <div 
-                      key={tpl.id} 
-                      onClick={() => handleTemplateSelect(tpl)} 
-                      className={`relative bg-gray-900 border-2 rounded-xl overflow-hidden cursor-pointer h-48 group ${selectedTemplate?.id === tpl.id ? 'border-brand-green' : 'border-gray-800 hover:border-gray-600'}`}
-                    >
-                       {tpl.thumbnail_url ? (
-                         <img src={tpl.thumbnail_url} alt={tpl.title} className="w-full h-full object-cover" />
-                       ) : (
-                         <div className="w-full h-full flex items-center justify-center bg-gray-800 text-xs p-2">{tpl.url}</div>
-                       )}
-                       <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 flex items-end p-2 transition-opacity">
-                          <span className="text-white text-sm font-bold truncate">{tpl.title}</span>
-                       </div>
-                       {selectedTemplate?.id === tpl.id && (
-                         <div className="absolute top-2 right-2 bg-brand-green text-black rounded-full p-1">
-                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>
-                         </div>
-                       )}
+        {/* History Sidebar/Drawer */}
+        {showHistory && (
+            <div className="absolute top-20 right-4 w-80 bg-gray-900 border border-gray-800 rounded-xl shadow-2xl p-4 z-30 max-h-[80vh] overflow-y-auto">
+                <h3 className="text-brand-green font-bold mb-4">{t.my_creations}</h3>
+                {history.length === 0 ? <p className="text-gray-500 text-sm">{t.no_creations}</p> : (
+                    <div className="space-y-3">
+                        {history.map(item => (
+                            <div key={item.id} onClick={() => loadFromHistory(item)} className="cursor-pointer bg-black/50 p-2 rounded hover:border-brand-green border border-transparent transition-all flex gap-3 items-center">
+                                <img src={item.imageUrl} className="w-12 h-12 object-cover rounded bg-white" alt="Thumbnail" />
+                                <div className="overflow-hidden">
+                                    <p className="font-bold text-sm truncate">{item.data.name}</p>
+                                    <p className="text-xs text-gray-500">{item.type} - {new Date(Number(item.id)).toLocaleDateString()}</p>
+                                </div>
+                            </div>
+                        ))}
                     </div>
-                 ))}
-              </div>
-           </div>
-        )}
-
-        {/* STEP 3: INPUT FORM */}
-        {step === 'input-form' && (
-          <div className="max-w-3xl mx-auto animate-fade-in pb-20">
-            <button onClick={() => setStep('template-selection')} className="mb-6 text-gray-400 hover:text-white flex items-center gap-2"><span>←</span> Back to Styles</button>
-            <div className="bg-gray-900/80 backdrop-blur-md border border-gray-800 rounded-2xl p-8 shadow-2xl">
-              <div className="mb-8 text-center">
-                 <h2 className="text-3xl font-bold mb-2 flex items-center justify-center gap-2 text-white">
-                   {designType === 'web' ? t.type_web : designType === 'logo' ? t.type_logo : designType === 'identity' ? t.type_identity : designType === 'social' ? t.type_social : t.type_brochure}
-                 </h2>
-                 {selectedTemplate && (
-                    <div className="inline-block bg-brand-green/20 text-brand-green px-3 py-1 rounded-full text-xs mt-2 border border-brand-green/30">
-                       Using Style: {selectedTemplate.title}
-                    </div>
-                 )}
-              </div>
-
-              {/* Input Mode Toggle */}
-              <div className="mb-8 bg-black/30 p-2 rounded-xl flex border border-gray-800">
-                <button onClick={() => setInputMode('form')} className={`flex-1 py-2 rounded-lg text-sm font-medium transition-all ${inputMode === 'form' ? 'bg-brand-green text-black shadow-lg' : 'text-gray-400 hover:text-white'}`}>{t.mode_form_input}</button>
-                <button onClick={() => setInputMode('zip')} className={`flex-1 py-2 rounded-lg text-sm font-medium transition-all ${inputMode === 'zip' ? 'bg-brand-green text-black shadow-lg' : 'text-gray-400 hover:text-white'}`}>{t.mode_zip_upload}</button>
-              </div>
-
-              <div className="space-y-8">
-                {inputMode === 'zip' && (
-                  <div className="bg-black/30 p-6 rounded-2xl border border-gray-800">
-                    <FileUpload<File> 
-                      label={zipFile ? t.zip_uploaded_msg : t.upload_zip_label} 
-                      onFileSelect={(f) => setZipFile(f as File | null)} 
-                      accept=".zip" 
-                      returnFileObject={true} 
-                    />
-                  </div>
                 )}
-
-                {inputMode === 'form' && (
-                  <>
-                    <div className="grid grid-cols-2 gap-4">
-                        <div className="col-span-2">
-                          <FileUpload<string> 
-                            label={t.upload_label} 
-                            onFileSelect={(f) => setLogoBase64(f as string | null)} 
-                            disabled={isDisabledForFormFields} 
-                          />
-                        </div>
-                    </div>
-                    <div className="grid md:grid-cols-2 gap-6">
-                        <div>
-                          <label className="block text-sm font-medium text-gray-400 mb-2">{t.input_name}</label>
-                          <input type="text" value={businessData.name} onChange={(e) => setBusinessData({...businessData, name: e.target.value})} placeholder={t.placeholder_name} className="w-full bg-black/50 border border-gray-700 rounded-xl p-4 text-white focus:border-brand-green focus:outline-none" disabled={isDisabledForFormFields} />
-                        </div>
-                        <div>
-                          <label className="block text-sm font-medium text-gray-400 mb-2">{t.input_industry}</label>
-                          <input type="text" value={businessData.industry} onChange={(e) => setBusinessData({...businessData, industry: e.target.value})} placeholder={t.placeholder_industry} className="w-full bg-black/50 border border-gray-700 rounded-xl p-4 text-white focus:border-brand-green focus:outline-none" disabled={isDisabledForFormFields} />
-                        </div>
-                    </div>
-                    
-                    <div>
-                      <label className="block text-sm font-medium text-gray-400 mb-2">{t.input_description}</label>
-                      <textarea value={businessData.description} onChange={(e) => setBusinessData({...businessData, description: e.target.value})} placeholder={t.placeholder_description} rows={4} className="w-full bg-black/50 border border-gray-700 rounded-xl p-4 text-white focus:border-brand-green focus:outline-none" disabled={isDisabledForFormFields} />
-                    </div>
-
-                    {/* Additional fields omitted for brevity, keeping core structure */}
-                  </>
-                )} 
-
-                <button onClick={handleGenerateClick} className="w-full bg-brand-green hover:bg-lime-500 text-black font-bold text-xl py-5 rounded-xl shadow-lg shadow-brand-green/20 transition-all hover:scale-[1.01] active:scale-[0.99] mt-6">
-                  {designType === 'web' ? t.contact_submit : t.generate_btn}
-                </button>
-              </div>
             </div>
-          </div>
         )}
 
-        {/* STEP 4: LOADING */}
+        {/* Step 1: Category Selection */}
+        {step === 'category-selection' && (
+            <div className="text-center animate-fade-in max-w-2xl w-full">
+                <h1 className="text-5xl font-bold mb-4 bg-clip-text text-transparent bg-gradient-to-r from-white to-gray-500">{t.title}</h1>
+                <p className="text-xl text-gray-400 mb-12">{t.subtitle}</p>
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <button onClick={() => { setCategory('graphics'); setStep('type-selection'); }} className="group relative overflow-hidden bg-gray-900 border border-gray-800 hover:border-brand-green rounded-2xl p-8 transition-all duration-300">
+                        <div className="absolute inset-0 bg-brand-green/5 group-hover:bg-brand-green/10 transition-colors"></div>
+                        <h3 className="text-2xl font-bold mb-2 group-hover:text-brand-green transition-colors">{t.cat_graphics}</h3>
+                        <p className="text-gray-500">Logos, Social Media, Brochures</p>
+                    </button>
+                    <button onClick={() => { setCategory('web'); setDesignType('web'); setStep('template-selection'); }} className="group relative overflow-hidden bg-gray-900 border border-gray-800 hover:border-brand-green rounded-2xl p-8 transition-all duration-300">
+                        <div className="absolute inset-0 bg-brand-green/5 group-hover:bg-brand-green/10 transition-colors"></div>
+                        <h3 className="text-2xl font-bold mb-2 group-hover:text-brand-green transition-colors">{t.cat_web}</h3>
+                        <p className="text-gray-500">Landing Pages, Websites</p>
+                    </button>
+                </div>
+            </div>
+        )}
+
+        {/* Step 2: Type Selection */}
+        {step === 'type-selection' && (
+            <div className="text-center animate-fade-in w-full max-w-4xl">
+                 <button onClick={() => setStep('category-selection')} className="mb-8 text-gray-500 hover:text-white flex items-center gap-2 mx-auto">← {t.back_to_menu}</button>
+                 <h2 className="text-3xl font-bold mb-8">{t.select_type}</h2>
+                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    {[
+                        { id: 'logo', label: t.type_logo, icon: '🎨' },
+                        { id: 'identity', label: t.type_identity, icon: '🆔' },
+                        { id: 'social', label: t.type_social, icon: '📱' },
+                        { id: 'brochure', label: t.type_brochure, icon: '📄' },
+                    ].map(type => (
+                        <button key={type.id} onClick={() => { setDesignType(type.id as DesignType); setStep('template-selection'); }} className="bg-gray-900 border border-gray-800 p-6 rounded-xl hover:bg-gray-800 hover:border-brand-green transition-all">
+                            <div className="text-4xl mb-4">{type.icon}</div>
+                            <div className="font-bold">{type.label}</div>
+                        </button>
+                    ))}
+                 </div>
+            </div>
+        )}
+
+        {/* Step 3: Template Selection (Restored) */}
+        {step === 'template-selection' && (
+            <div className="w-full max-w-6xl animate-fade-in">
+                <button onClick={() => setStep(category === 'web' ? 'category-selection' : 'type-selection')} className="mb-6 text-gray-500 hover:text-white flex items-center gap-2">← Back</button>
+                <div className="text-center mb-10">
+                    <h2 className="text-3xl font-bold mb-2">Choose a Reference Style</h2>
+                    <p className="text-gray-400">Select a style to inspire the AI generator.</p>
+                </div>
+                
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+                    {/* Default Option: No Template */}
+                    <button 
+                        onClick={() => { setSelectedTemplate(null); setBusinessData(prev => ({...prev, templateId: undefined})); setStep('input-form'); }}
+                        className="aspect-square bg-gray-900 border-2 border-gray-700 hover:border-brand-green rounded-xl p-6 flex flex-col items-center justify-center transition-all group"
+                    >
+                        <div className="w-16 h-16 rounded-full bg-gray-800 flex items-center justify-center mb-4 group-hover:bg-brand-green group-hover:text-black transition-colors">
+                            ✨
+                        </div>
+                        <span className="font-bold">Start from Scratch</span>
+                    </button>
+
+                    {/* Render Templates */}
+                    {relevantTemplates.map(tpl => (
+                         <button 
+                            key={tpl.id}
+                            onClick={() => handleTemplateSelect(tpl)}
+                            className="aspect-square relative group rounded-xl overflow-hidden border-2 border-transparent hover:border-brand-green transition-all"
+                         >
+                            <img src={tpl.thumbnail_url || tpl.url} alt={tpl.title} className="w-full h-full object-cover" />
+                            <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center flex-col p-4">
+                                <p className="font-bold text-white mb-2">{tpl.title}</p>
+                                <span className="text-xs bg-brand-green text-black px-2 py-1 rounded">Select Style</span>
+                            </div>
+                         </button>
+                    ))}
+                </div>
+            </div>
+        )}
+
+        {/* Step 4: Input Form */}
+        {step === 'input-form' && (
+            <div className="w-full max-w-2xl animate-fade-in">
+                <div className="flex justify-between items-center mb-6">
+                    <button onClick={() => setStep('template-selection')} className="text-gray-500 hover:text-white">← Back</button>
+                    <div className="flex gap-2 bg-gray-900 p-1 rounded-lg">
+                        <button onClick={() => setInputMode('form')} className={`px-4 py-1 rounded text-sm ${inputMode === 'form' ? 'bg-gray-700 text-white' : 'text-gray-400'}`}>{t.mode_form_input}</button>
+                        <button onClick={() => setInputMode('zip')} className={`px-4 py-1 rounded text-sm ${inputMode === 'zip' ? 'bg-gray-700 text-white' : 'text-gray-400'}`}>{t.mode_zip_upload}</button>
+                    </div>
+                </div>
+
+                <div className="bg-gray-900/50 backdrop-blur border border-gray-800 p-8 rounded-2xl space-y-6">
+                    {inputMode === 'zip' ? (
+                        <FileUpload<File> 
+                            label={t.upload_zip_label} 
+                            accept=".zip" 
+                            onFileSelect={(f) => {
+                                if (!Array.isArray(f)) setZipFile(f);
+                            }} 
+                            returnFileObject={true} 
+                        />
+                    ) : (
+                        <>
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-xs text-gray-400 mb-1">{t.input_name}</label>
+                                    <input type="text" value={businessData.name} onChange={e => handleInputChange('name', e.target.value)} className="w-full bg-black/50 border border-gray-700 rounded-lg p-3 focus:border-brand-green outline-none transition-colors" placeholder={t.placeholder_name} />
+                                </div>
+                                <div>
+                                    <label className="block text-xs text-gray-400 mb-1">{t.input_industry}</label>
+                                    <input type="text" value={businessData.industry} onChange={e => handleInputChange('industry', e.target.value)} className="w-full bg-black/50 border border-gray-700 rounded-lg p-3 focus:border-brand-green outline-none transition-colors" placeholder={t.placeholder_industry} />
+                                </div>
+                            </div>
+                            
+                            <div>
+                                <label className="block text-xs text-gray-400 mb-1">{t.input_description}</label>
+                                <textarea value={businessData.description} onChange={e => handleInputChange('description', e.target.value)} className="w-full bg-black/50 border border-gray-700 rounded-lg p-3 h-24 focus:border-brand-green outline-none transition-colors" placeholder={t.placeholder_description} />
+                            </div>
+
+                            {/* Dynamic Fields based on Type */}
+                            {designType === 'logo' && (
+                                <FileUpload 
+                                    label={t.upload_label} 
+                                    onFileSelect={(f) => {
+                                        if (!Array.isArray(f)) setLogoBase64(f);
+                                    }} 
+                                />
+                            )}
+                            
+                            {(designType === 'brochure' || designType === 'web') && (
+                                <div>
+                                    <label className="block text-xs text-gray-400 mb-1">Color Palette</label>
+                                    <input type="text" value={businessData.customColorPalette} onChange={e => handleInputChange('customColorPalette', e.target.value)} className="w-full bg-black/50 border border-gray-700 rounded-lg p-3 focus:border-brand-green outline-none" placeholder={t.placeholder_custom_colors} />
+                                </div>
+                            )}
+
+                             {designType === 'brochure' && (
+                                <div className="grid grid-cols-2 gap-4">
+                                     <div>
+                                        <label className="block text-xs text-gray-400 mb-1">{t.input_orientation}</label>
+                                        <select value={businessData.brochureOrientation} onChange={e => handleInputChange('brochureOrientation', e.target.value)} className="w-full bg-black/50 border border-gray-700 rounded-lg p-3 text-white">
+                                            <option value="portrait">{t.orientation_portrait}</option>
+                                            <option value="landscape">{t.orientation_landscape}</option>
+                                        </select>
+                                     </div>
+                                      <div>
+                                        <label className="block text-xs text-gray-400 mb-1">{t.input_size}</label>
+                                        <select value={businessData.brochureSize} onChange={e => handleInputChange('brochureSize', e.target.value)} className="w-full bg-black/50 border border-gray-700 rounded-lg p-3 text-white">
+                                            <option value="a4">{t.size_a4}</option>
+                                            <option value="a5">{t.size_a5}</option>
+                                            <option value="folded">{t.size_folded}</option>
+                                        </select>
+                                     </div>
+                                </div>
+                             )}
+                             
+                             {/* Show Selected Template info if any */}
+                             {selectedTemplate && (
+                                 <div className="bg-black/30 p-4 rounded border border-gray-700 flex items-center gap-4">
+                                     <img src={selectedTemplate.thumbnail_url || selectedTemplate.url} className="w-12 h-12 rounded object-cover" alt="Selected" />
+                                     <div>
+                                         <p className="text-sm font-bold text-gray-300">Style Reference Selected</p>
+                                         <p className="text-xs text-brand-green">{selectedTemplate.title}</p>
+                                     </div>
+                                     <button onClick={() => { setSelectedTemplate(null); setBusinessData(prev => ({...prev, templateId: undefined})); }} className="ml-auto text-xs text-red-400 hover:text-red-300">Remove</button>
+                                 </div>
+                             )}
+
+                        </>
+                    )}
+
+                    <button onClick={initiateGeneration} className="w-full bg-brand-green hover:bg-white hover:scale-[1.02] text-black font-bold py-4 rounded-xl transition-all duration-300 shadow-[0_0_20px_rgba(123,193,67,0.3)]">
+                        {t.generate_btn}
+                    </button>
+                </div>
+            </div>
+        )}
+
+        {/* Step 5: Generating */}
         {step === 'generating' && (
-          <div className="flex flex-col items-center justify-center min-h-[60vh] animate-fade-in">
-             <div className="relative w-24 h-24 mb-8">
-               <div className="absolute inset-0 border-4 border-gray-800 rounded-full"></div>
-               <div className="absolute inset-0 border-4 border-brand-green rounded-full border-t-transparent animate-spin"></div>
-             </div>
-             <h2 className="text-2xl font-bold text-center animate-pulse mb-2">{t.generating}</h2>
-             <p className="text-brand-green text-sm font-medium">{loadingStatus}</p>
-          </div>
+            <div className="text-center animate-fade-in">
+                <div className="w-24 h-24 border-4 border-gray-800 border-t-brand-green rounded-full animate-spin mx-auto mb-8"></div>
+                <h2 className="text-2xl font-bold mb-4">{t.generating}</h2>
+                <p className="text-gray-400 animate-pulse">{loadingStatus}</p>
+            </div>
         )}
 
-        {/* STEP 5: RESULT */}
+        {/* Step 6: Result */}
         {step === 'result' && generatedResult && (
-           <div className="max-w-5xl mx-auto animate-fade-in pb-20">
-             <button onClick={() => setStep('input-form')} className="mb-6 text-gray-400 hover:text-white flex items-center gap-2"><span>←</span> {t.load_design}</button>
-             <div className="bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden shadow-2xl">
-                <div className="relative w-full aspect-video bg-[#0f0f0f] flex items-center justify-center">
-                    <img src={generatedResult.imageUrl} alt="Result" className="max-h-full max-w-full object-contain" />
+            <div className="w-full max-w-6xl animate-fade-in flex flex-col md:flex-row gap-8">
+                <div className="flex-1 bg-gray-900 border border-gray-800 rounded-2xl p-4 flex items-center justify-center min-h-[500px] relative">
+                    <img src={generatedResult.imageUrl} className="max-w-full max-h-[80vh] shadow-2xl rounded" alt="Generated Design" />
+                    {generatedResult.status === 'initial_draft_placeholder' && (
+                        <div className="absolute inset-0 bg-black/70 flex items-center justify-center flex-col p-6 text-center">
+                            <p className="text-xl font-bold mb-2 text-brand-green">{t.web_design_pending_message}</p>
+                        </div>
+                    )}
                 </div>
-                <div className="p-8 border-t border-gray-800 bg-gray-900/50 flex flex-wrap gap-3 justify-center">
-                   <button onClick={() => handleDownload(generatedResult.imageUrl, `GetDesign.png`)} className="px-6 py-3 bg-gray-800 hover:bg-gray-700 rounded-xl text-white">{t.download_btn}</button>
-                   <button onClick={() => handleWhatsAppRequest(generatedResult)} className="px-6 py-3 bg-[#25D366] hover:bg-[#20bd5a] text-black font-bold rounded-xl">{t.whatsapp_btn}</button>
+                <div className="w-full md:w-80 space-y-4">
+                     <div className="bg-gray-900 border border-gray-800 p-6 rounded-xl">
+                        <h3 className="font-bold mb-4 text-brand-green">Details</h3>
+                        <p className="text-sm text-gray-400 mb-1">Project</p>
+                        <p className="mb-4">{generatedResult.data.name}</p>
+                        <p className="text-sm text-gray-400 mb-1">Type</p>
+                        <p className="mb-4 capitalize">{generatedResult.type}</p>
+                        <div className="h-px bg-gray-800 my-4"></div>
+                        <button onClick={() => {
+                            const link = document.createElement('a');
+                            link.href = generatedResult.imageUrl;
+                            link.download = `${generatedResult.data.name}-design.svg`;
+                            link.click();
+                        }} className="w-full bg-white text-black font-bold py-3 rounded-lg mb-2 hover:bg-gray-200">{t.download_btn}</button>
+                        <button onClick={() => setStep('category-selection')} className="w-full border border-gray-700 text-gray-400 py-3 rounded-lg hover:text-white hover:border-gray-500">{t.load_design}</button>
+                     </div>
                 </div>
-             </div>
-           </div>
+            </div>
+        )}
+
+        {/* Contact Modal */}
+        {showContactModal && (
+            <div className="fixed inset-0 bg-black/90 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
+                <div className="bg-gray-900 border border-gray-800 p-8 rounded-2xl max-w-md w-full animate-scale-in">
+                    <h2 className="text-2xl font-bold mb-2">{t.contact_modal_title}</h2>
+                    <p className="text-gray-400 mb-6">{t.contact_modal_subtitle}</p>
+                    <div className="space-y-4">
+                        <input value={contactDetails.name} onChange={e=>setContactDetails({...contactDetails, name: e.target.value})} placeholder={t.contact_name} className={`w-full bg-black border ${validationErrors.name ? 'border-red-500' : 'border-gray-700'} rounded p-3`} />
+                        {validationErrors.name && <p className="text-red-500 text-xs">{validationErrors.name}</p>}
+                        
+                        <input value={contactDetails.company} onChange={e=>setContactDetails({...contactDetails, company: e.target.value})} placeholder={t.contact_company} className={`w-full bg-black border ${validationErrors.company ? 'border-red-500' : 'border-gray-700'} rounded p-3`} />
+                         {validationErrors.company && <p className="text-red-500 text-xs">{validationErrors.company}</p>}
+
+                        <input value={contactDetails.email} onChange={e=>setContactDetails({...contactDetails, email: e.target.value})} placeholder={t.contact_email} className={`w-full bg-black border ${validationErrors.email ? 'border-red-500' : 'border-gray-700'} rounded p-3`} />
+                         {validationErrors.email && <p className="text-red-500 text-xs">{validationErrors.email}</p>}
+
+                        <input value={contactDetails.phone} onChange={e=>setContactDetails({...contactDetails, phone: e.target.value})} placeholder={t.contact_phone} className={`w-full bg-black border ${validationErrors.phone ? 'border-red-500' : 'border-gray-700'} rounded p-3`} />
+                         {validationErrors.phone && <p className="text-red-500 text-xs">{validationErrors.phone}</p>}
+
+                        <button onClick={handleContactSubmit} className="w-full bg-brand-green text-black font-bold py-3 rounded hover:bg-white transition-colors">{t.contact_submit}</button>
+                        <button onClick={() => setShowContactModal(false)} className="w-full text-gray-500 mt-2 hover:text-white">Cancel</button>
+                    </div>
+                </div>
+            </div>
         )}
       </main>
-
-      {/* History, Modals, Footer (Existing) */}
-      {showContactModal && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-           <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={() => setShowContactModal(false)} />
-           <div className="relative bg-gray-900 border border-gray-800 rounded-2xl p-8 max-w-md w-full shadow-2xl animate-fade-in">
-              <h2 className="text-2xl font-bold text-white mb-2 text-center">{t.contact_modal_title}</h2>
-              <form onSubmit={handleContactSubmit} className="space-y-4">
-                 <input type="text" placeholder={t.contact_name} value={contactDetails.name} onChange={(e) => setContactDetails(prev => ({...prev, name: e.target.value}))} className="w-full bg-black/50 border border-gray-700 rounded-lg p-3 text-white" />
-                 <input type="email" placeholder={t.contact_email} value={contactDetails.email} onChange={(e) => setContactDetails(prev => ({...prev, email: e.target.value}))} className="w-full bg-black/50 border border-gray-700 rounded-lg p-3 text-white" />
-                 <input type="text" placeholder={t.contact_company} value={contactDetails.company} onChange={(e) => setContactDetails(prev => ({...prev, company: e.target.value}))} className="w-full bg-black/50 border border-gray-700 rounded-lg p-3 text-white" />
-                 <input type="tel" placeholder={t.contact_phone} value={contactDetails.phone} onChange={(e) => setContactDetails(prev => ({...prev, phone: e.target.value}))} className="w-full bg-black/50 border border-gray-700 rounded-lg p-3 text-white" />
-                 <button type="submit" className="w-full bg-brand-green text-black font-bold py-3 rounded-xl mt-2">{t.contact_submit}</button>
-              </form>
-           </div>
-        </div>
-      )}
     </div>
   );
 }

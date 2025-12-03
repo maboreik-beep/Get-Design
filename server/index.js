@@ -124,7 +124,6 @@ initializeDatabase().catch(err => {
 });
 
 // --- Helper: AI Generation Logic (Gemini 2.5) ---
-// Defined before usage to prevent ReferenceError
 async function handleAIGeneration(type, businessData, files, db) {
   const apiKey = process.env.API_KEY;
   if (!apiKey) throw new Error("API Key missing");
@@ -141,10 +140,8 @@ async function handleAIGeneration(type, businessData, files, db) {
   if (templateId) {
     const template = await db.get("SELECT * FROM Templates WHERE id = ?", templateId);
     if (template) {
-      referenceUrl = template.url; // Use URL for WhatsApp reference
+      referenceUrl = template.url; 
       try {
-        // Fetch the image from URL to pass to Gemini
-        // Assuming template.thumbnail_url or template.url is a direct image link
         const imgUrl = template.thumbnail_url || template.url;
         const imgRes = await fetch(imgUrl);
         if (imgRes.ok) {
@@ -163,22 +160,31 @@ async function handleAIGeneration(type, businessData, files, db) {
   }
 
   // Construct Prompt based on Type
-  let prompt = `Create a professional ${type} design for a business named "${name}". `;
-  if (industry) prompt += `Industry: ${industry}. `;
-  if (description) prompt += `Description: ${description}. `;
-  if (visualStyle) prompt += `Style: ${visualStyle}. `;
-  if (customColorPalette) prompt += `Colors: ${customColorPalette}. `;
+  let prompt = `Role: You are an expert minimalist graphic designer. 
+  Task: Create a visual design for a business named "${name}".
+  Industry: ${industry || 'General'}.
+  Description: ${description || 'A modern business'}.
+  Style: ${visualStyle || 'Modern'}.
+  Colors: ${customColorPalette || 'Professional color scheme'}.
+  
+  IMPORTANT: You must return ONLY valid SVG code. No markdown code blocks (like \`\`\`svg), no conversational text, no explanations. Just the raw <svg>...</svg> string.
+  `;
   
   if (type === 'logo') {
-    prompt += "Generate a minimalist and scalable SVG code for the logo. Return ONLY the SVG code.";
+    prompt += "Output: A professional, scalable, minimalist logo in SVG format. Ensure all text uses sans-serif fonts and is centered. Use distinct shapes and high contrast.";
   } else if (type === 'web') {
-    prompt += "Generate a modern landing page structure using HTML and Tailwind CSS. Return ONLY the HTML code.";
+    // Changing 'web' to generate a wireframe SVG instead of HTML code, so it can be displayed immediately
+    prompt += "Output: A flat, high-fidelity UI wireframe/mockup of a landing page website homepage in SVG format. Dimensions: 800x600. Include a header, a hero section with a placeholder image and headline, a services section with 3 icons, and a footer. Use rectangles and text elements to simulate the website layout.";
+  } else if (type === 'social') {
+    prompt += "Output: A square social media post (1080x1080 viewbox) in SVG format. It should be an promotional banner with a catchy headline, the business name, and abstract geometric decorations.";
+  } else if (type === 'brochure') {
+    prompt += "Output: A layout for a brochure cover (A4 ratio) in SVG format. Include the title, placeholder imagery using shapes, and an elegant layout.";
   } else {
-    prompt += "Describe the design concept in detail and provide a placeholder SVG visual.";
+    prompt += "Output: A conceptual design in SVG format.";
   }
 
   if (referenceImagePart) {
-    prompt += " I have attached a reference image. Please take inspiration from its style, layout, or vibe, but do not copy it directly.";
+    prompt += " I have attached a reference image. Analyze its style, color balance, and composition. Create a unique design that is INSPIRED by this reference but NOT a direct copy.";
   }
 
   const parts = [];
@@ -186,59 +192,68 @@ async function handleAIGeneration(type, businessData, files, db) {
   parts.push({ text: prompt });
 
   const modelName = 'gemini-2.5-flash'; 
-  const response = await ai.models.generateContent({
-    model: modelName,
-    contents: { parts },
-  });
-
-  let generatedText = response.text;
   
-  // Basic cleanup to extract SVG/HTML if wrapped in markdown blocks
-  generatedText = generatedText.replace(/```(svg|html|xml)/g, '').replace(/```/g, '');
+  console.log(`Generating ${type} for ${name}...`);
 
-  // For Web, create a task in DB
-  let designTaskId = null;
-  if (type === 'web') {
-     const result = await db.run(
-       "INSERT INTO DesignTasks (lead_id, type, status, request_details, reference_template_id) VALUES (?, ?, ?, ?, ?)",
-       data.contactId || null, 'web', 'pending', businessData, templateId || null
-     );
-     designTaskId = result.lastID;
-  } else if (data.contactId) {
-     // Log other requests too
-     await db.run(
-       "INSERT INTO DesignTasks (lead_id, type, status, request_details, reference_template_id) VALUES (?, ?, ?, ?, ?)",
-       data.contactId, type, 'completed', businessData, templateId || null
-     );
+  try {
+    const response = await ai.models.generateContent({
+      model: modelName,
+      contents: { parts },
+    });
+
+    let generatedText = response.text || "";
+    
+    // Robust Extraction Logic
+    let imageUrl = '';
+    
+    // 1. Try to find SVG block
+    const svgMatch = generatedText.match(/<svg[\s\S]*?<\/svg>/i);
+    if (svgMatch) {
+      imageUrl = `data:image/svg+xml;base64,${Buffer.from(svgMatch[0]).toString('base64')}`;
+    } else {
+        // Fallback: Create an SVG containing the text if no SVG was found
+        const cleanText = generatedText.replace(/<[^>]*>?/gm, '').substring(0, 200).replace(/"/g, "'");
+        const fallbackSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="800" height="600" viewBox="0 0 800 600" style="background-color:#111">
+            <rect width="100%" height="100%" fill="#111"/>
+            <text x="50%" y="50%" fill="#7bc143" font-family="sans-serif" font-size="24" text-anchor="middle" dominant-baseline="middle">
+                ${cleanText || 'Design generated but format was invalid.'}
+            </text>
+        </svg>`;
+        imageUrl = `data:image/svg+xml;base64,${Buffer.from(fallbackSvg).toString('base64')}`;
+        console.warn("No SVG found in response, using fallback text display.");
+    }
+
+    // Database Logging
+    let designTaskId = null;
+    if (type === 'web') {
+       // For web, we save the task but now we also return the generated wireframe immediately
+       const result = await db.run(
+         "INSERT INTO DesignTasks (lead_id, type, status, request_details, reference_template_id, output_url) VALUES (?, ?, ?, ?, ?, ?)",
+         data.contactId || null, 'web', 'completed', businessData, templateId || null, imageUrl
+       );
+       designTaskId = result.lastID;
+    } else if (data.contactId) {
+       await db.run(
+         "INSERT INTO DesignTasks (lead_id, type, status, request_details, reference_template_id, output_url) VALUES (?, ?, ?, ?, ?, ?)",
+         data.contactId, type, 'completed', businessData, templateId || null, imageUrl
+       );
+    }
+
+    return {
+      id: designTaskId ? designTaskId.toString() : Date.now().toString(),
+      status: 'ready', // Always return ready since we now generate SVG mockups for everything
+      imageUrl,
+      type,
+      data: data,
+      templateId,
+      templateLink: referenceUrl,
+      designTaskId
+    };
+
+  } catch (err) {
+    console.error("Gemini API Error:", err);
+    throw new Error("AI Generation Service Failed: " + err.message);
   }
-
-  // If output is SVG, return it as data URL
-  let imageUrl = '';
-  if (generatedText.trim().startsWith('<svg') || generatedText.trim().startsWith('<!DOCTYPE html') || generatedText.trim().startsWith('<html')) {
-     imageUrl = `data:image/svg+xml;base64,${Buffer.from(generatedText).toString('base64')}`;
-     
-     if (type === 'web') {
-        // Returning the generic draft placeholder for now, but preserving the generated code in a real app would be key.
-        imageUrl = "data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iODAwIiBoZWlnaHQ9IjYwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMTAwJSIgaGVpZ2h0PSIxMDAlIiBmaWxsPSIjMTExIi8+PHRleHQgeD0iNTAlIiB5PSI1MCUiIGZpbGw9IiM3YmMxNDMiIGZvbnQtZmFtaWx5PSJzYW5zLXNlcmlmIiBmb250LXNpemU9IjMwIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIj5XZWJzaXRlIE1vY2t1cCBHZW5lcmF0ZWQ8L3RleHQ+PC9zdmc+"; 
-     }
-  } else {
-     // Fallback if AI returned text description
-     imageUrl = `data:image/svg+xml;base64,${Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 400"><text x="50%" y="50%" fill="white" font-size="20" text-anchor="middle">${generatedText.substring(0, 100)}...</text></svg>`).toString('base64')}`;
-  }
-
-  // IMPORTANT: For web tasks, return the DB ID so the frontend can poll properly
-  const returnId = designTaskId ? designTaskId.toString() : Date.now().toString();
-
-  return {
-    id: returnId,
-    status: type === 'web' ? 'initial_draft_placeholder' : 'ready',
-    imageUrl,
-    type,
-    data: data,
-    templateId,
-    templateLink: referenceUrl,
-    designTaskId
-  };
 }
 
 // --- Auth Middleware ---
@@ -433,8 +448,7 @@ app.get('/api/generated-designs/:id/status', async (req, res) => {
          status = 'generating_by_designer';
          imageUrl = "data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iODAwIiBoZWlnaHQ9IjYwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMTAwJSIgaGVpZ2h0PSIxMDAlIiBmaWxsPSIjMjIyIi8+PHRleHQgeD0iNTAlIiB5PSI1MCUiIGZpbGw9IiM3YmMxNDMiIGZvbnQtZmFtaWx5PSJzYW5zLXNlcmlmIiBmb250LXNpemU9IjMwIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIj5EZXNpZ25lciBpcyB3b3JraW5nIG9uIGl0Li4uPC90ZXh0Pjwvc3ZnPg==";
        } else {
-         // Default placeholder
-         imageUrl = "data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iODAwIiBoZWlnaHQ9IjYwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMTAwJSIgaGVpZ2h0PSIxMDAlIiBmaWxsPSIjMTExIi8+PHRleHQgeD0iNTAlIiB5PSI1MCUiIGZpbGw9IiM3YmMxNDMiIGZvbnQtZmFtaWx5PSJzYW5zLXNlcmlmIiBmb250LXNpemU9IjMwIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIj5XZWJzaXRlIE1vY2t1cCBHZW5lcmF0ZWQ8L3RleHQ+PC9zdmc+";
+         imageUrl = task.output_url || "data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iODAwIiBoZWlnaHQ9IjYwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMTAwJSIgaGVpZ2h0PSIxMDAlIiBmaWxsPSIjMTExIi8+PHRleHQgeD0iNTAlIiB5PSI1MCUiIGZpbGw9IiM3YmMxNDMiIGZvbnQtZmFtaWx5PSJzYW5zLXNlcmlmIiBmb250LXNpemU9IjMwIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIj5XZWJzaXRlIE1vY2t1cCBHZW5lcmF0ZWQ8L3RleHQ+PC9zdmc+";
        }
        
        return res.json({ imageUrl, status });
