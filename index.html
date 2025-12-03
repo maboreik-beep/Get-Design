@@ -11,11 +11,6 @@
 
       gtag('config', 'G-FT8XR0S3HL');
     </script>
-    <script>
-      // Runtime polyfill for process.env to prevent "process is not defined" errors
-      window.process = window.process || {};
-      window.process.env = window.process.env || {};
-    </script>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     
@@ -116,36 +111,38 @@
         background: #7bc143; 
       }
     </style>
-  <script type="importmap">
+<script type="importmap">
 {
   "imports": {
-    "react": "https://aistudiocdn.com/react@^19.2.0",
-    "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.0/",
-    "react/": "https://aistudiocdn.com/react@^19.2.0/",
     "@google/genai": "https://aistudiocdn.com/@google/genai@^1.30.0",
-    "vite": "https://aistudiocdn.com/vite@^7.2.4",
+    "fs": "https://aistudiocdn.com/fs@^0.0.1-security",
+    "os": "https://aistudiocdn.com/os@^0.1.2",
+    "mammoth": "https://aistudiocdn.com/mammoth@^1.11.0",
+    "nodemailer": "https://aistudiocdn.com/nodemailer@^7.0.11",
+    "pdf-parse": "https://aistudiocdn.com/pdf-parse@^2.4.5",
+    "exceljs": "https://aistudiocdn.com/exceljs@^4.4.0",
+    "sqlite3": "https://aistudiocdn.com/sqlite3@^5.1.7",
+    "util": "https://aistudiocdn.com/util@^0.12.5",
     "@vitejs/plugin-react": "https://aistudiocdn.com/@vitejs/plugin-react@^5.1.1",
+    "vite": "https://aistudiocdn.com/vite@^7.2.6",
     "path": "https://aistudiocdn.com/path@^0.12.7",
     "dotenv": "https://aistudiocdn.com/dotenv@^17.2.3",
     "express": "https://aistudiocdn.com/express@^5.2.1",
-    "url": "https://aistudiocdn.com/url@^0.11.4",
-    "nodemailer": "https://aistudiocdn.com/nodemailer@^7.0.11",
-    "adm-zip": "https://aistudiocdn.com/adm-zip@^0.5.16",
     "multer": "https://aistudiocdn.com/multer@^2.0.2",
-    "fs": "https://aistudiocdn.com/fs@^0.0.1-security",
-    "os": "https://aistudiocdn.com/os@^0.1.2",
-    "sqlite3": "https://aistudiocdn.com/sqlite3@^5.1.7",
-    "util": "https://aistudiocdn.com/util@^0.12.5",
+    "url": "https://aistudiocdn.com/url@^0.11.4",
     "sqlite": "https://aistudiocdn.com/sqlite@^5.1.1",
-    "mammoth": "https://aistudiocdn.com/mammoth@^1.11.0",
-    "pdf-parse": "https://aistudiocdn.com/pdf-parse@^2.4.5",
-    "exceljs": "https://aistudiocdn.com/exceljs@^4.4.0"
+    "adm-zip": "https://aistudiocdn.com/adm-zip@^0.5.16",
+    "react/": "https://aistudiocdn.com/react@^19.2.0/",
+    "react": "https://aistudiocdn.com/react@^19.2.0",
+    "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.0/",
+    "cors": "https://aistudiocdn.com/cors@^2.8.5",
+    "jsonwebtoken": "https://aistudiocdn.com/jsonwebtoken@^9.0.2"
   }
 }
 </script>
 </head>
   <body>
     <div id="root"></div>
-    <script type="module" src="/index.js"></script>
+    <script type="module" src="/index.tsx"></script>
   </body>
 </html>

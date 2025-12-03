@@ -1,149 +1,96 @@
-
-
 export type Language = 'en' | 'ar';
 
-// New: Define Translation interface
+export type UserRole = 'admin' | 'coordinator' | 'designer';
+
+export interface User {
+  id: number;
+  username: string;
+  role: UserRole;
+  created_at: string;
+}
+
+export interface Lead {
+  id: number;
+  name: string;
+  company: string;
+  email: string;
+  phone: string;
+  design_interest: string;
+  status: 'new' | 'contacted' | 'in_progress' | 'closed';
+  notes?: string;
+  created_at: string;
+}
+
+export interface Template {
+  id: number;
+  title: string;
+  category: string;
+  url: string;
+  thumbnail_url?: string;
+  created_at: string;
+}
+
+// Frontend specific types
 export interface Translation {
   [key: string]: string;
 }
 
 export type DesignType = 'logo' | 'identity' | 'social' | 'brochure' | 'web';
-
 export type VisualStyle = 'minimalist' | 'bold' | 'elegant' | 'playful' | 'futuristic';
+export type InputMode = 'form' | 'zip';
 
 export type TemplateCategory = 
-  'logo' | 
-  'brand_identity' | 
-  'social_media' | 
-  'brochure_catalog' | 
-  'brochure_landscape' | 
-  'brochure_portrait' | 
-  'tri_fold_flyer' | 
-  'website_design';
-
-
-export type InputMode = 'form' | 'zip'; // New type to control input method
-
-export interface ContactDetails {
-  id?: number; // Added for backend primary key
-  name: string;
-  company: string;
-  email: string;
-  phone: string;
-}
+  | 'logo' 
+  | 'brand_identity' 
+  | 'social_media' 
+  | 'brochure_catalog'
+  | 'brochure_landscape'
+  | 'brochure_portrait'
+  | 'tri_fold_flyer'
+  | 'website_design';
 
 export interface BusinessData {
   name: string;
   industry?: string; 
   description?: string; 
-  brief?: string; 
-  
-  // New Visual Controls
-  customColorPalette?: string; // Replaces ColorVibe for custom input or AI inference
+  customColorPalette?: string;
   visualStyle?: VisualStyle;
-
-  contactId?: number; // Added to link design to a contact
+  contactId?: number;
   selectedPages?: string[]; 
   brochureOrientation?: 'portrait' | 'landscape'; 
   brochurePageCount?: number; 
   brochureSize?: 'a4' | 'a5' | 'square' | 'folded'; 
   logoStyle?: '3d' | 'flat'; 
   socialPlatform?: 'instagram' | 'facebook' | 'linkedin'; 
-  postContent?: string; // New field for social media text
-  brochureBase64?: string | string[] | null; // Updated to support array of base64 strings
+  postContent?: string;
+  brochureBase64?: string | string[] | null;
 }
 
-export type GeneratedResultStatus = 'initial_draft_placeholder' | 'ai_draft_generated' | 'pending_designer_review' | 'generating_by_designer' | 'ready' | 'failed'; // For web designs
+export type GeneratedResultStatus = 
+  | 'ready' 
+  | 'initial_draft_placeholder' 
+  | 'ai_draft_generated' 
+  | 'pending_designer_review' 
+  | 'generating_by_designer' 
+  | 'failed';
 
 export interface GeneratedResult {
-  id: string; // Client-side generated ID (or DB ID)
-  designTaskId?: number; // New: Link to DesignTask if it's a web design
-  status?: GeneratedResultStatus; // New: Status for web designs (e.g., pending)
-  templateId?: string; // Updated: Now stores the conceptual template ID (e.g., 'logo-L1-minimalist-tech')
-  templateUrl?: string; // For external templates, if applicable
-  templateTitle?: string; 
-  searchQuery?: string;
-  imageUrl: string; // Main image URL (or placeholder for pending)
-  images?: string[]; // Multiple images for web/brochure     
+  id: string;
+  status?: GeneratedResultStatus | string;
+  imageUrl: string;
+  images?: string[];    
   timestamp: number;
   type: DesignType;
   data: BusinessData;
-  templateLink?: string; // New field for recommended template link
-  contactId?: number; // Added to link design to a contact in the database
+  templateLink?: string;
+  templateId?: string | number;
+  designTaskId?: number;
 }
 
-export interface Lead {
-  id: number; // Added for backend primary key
-  date: string;
-  name: string;
-  company: string;
-  job_title?: string; 
-  email: string;
-  phone: string;
-  design_interest: string;
-}
-
-export interface GeneratedContentExamples {
-  headline: string;
-  body: string;
-  cta: string;
-}
-
-export interface ConceptualTemplate {
-  id: string; // Unique identifier for the template, e.g., 'logo-L1-minimalist-tech'
-  type: DesignType;
-  visualStyle: VisualStyle;
-  category: TemplateCategory; // New: Category for grouping templates
-  industryKeywords: string[]; // Stored as JSON string in DB, parsed to array
-  promptHint: string;
-  thumbnailUrl?: string; // Direct public URL for the template image
-  generatedContentExamples: GeneratedContentExamples; // Stored as JSON string in DB, parsed to object
-}
-
-// Interfaces for Admin Dashboard data (from backend)
-export interface LeadRecord {
-  id: number; // Added for backend primary key
+export interface ContactDetails {
+  id?: number;
   name: string;
   company: string;
   email: string;
   phone: string;
-  design_interest: string;
-  created_at: string;
-}
-
-export interface GeneratedDesignRecord {
-  id: number;
-  contact_id: number;
-  design_type: DesignType;
-  business_name: string;
-  industry: string;
-  description: string;
-  image_url: string;
-  template_link?: string;
-  conceptual_template_id?: string; // New field for conceptual template ID
-  created_at: string;
-  // Joined contact info
-  contact_email?: string; 
-  contact_phone?: string;
-}
-
-// Exported type for consistency
-export type DesignTaskStatus = 'pending' | 'generating' | 'completed' | 'failed' | 'cancelled';
-
-export interface DesignTask {
-  id: number;
-  contact_id: number;
-  design_type: DesignType;
-  business_data: string; // JSON string of BusinessData
-  logo_base64: string | null;
-  brochure_base64: string | null; // JSON string of string[]
-  zip_file_path: string | null; // Path to extracted zip content for re-use
-  status: DesignTaskStatus;
-  generated_design_id: number | null; // Link to GeneratedDesigns if completed
-  created_at: string;
-  updated_at: string;
-  // Joined contact info for display
-  contact_name?: string;
-  contact_email?: string;
-  contact_phone?: string;
 }
