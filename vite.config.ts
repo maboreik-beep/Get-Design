@@ -1,6 +1,8 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 
+declare const process: any;
+
 // https://vitejs.dev/config/
 export default defineConfig(() => {
   // Environment variables set directly on Render are available via `process.env`.
