@@ -1,3 +1,4 @@
+
 export type Language = 'en' | 'ar';
 
 export type UserRole = 'admin' | 'coordinator' | 'designer';
@@ -24,7 +25,7 @@ export interface Lead {
 export interface Template {
   id: number;
   title: string;
-  category: string;
+  category: TemplateCategory;
   url: string;
   thumbnail_url?: string;
   created_at: string;
@@ -64,6 +65,7 @@ export interface BusinessData {
   socialPlatform?: 'instagram' | 'facebook' | 'linkedin'; 
   postContent?: string;
   brochureBase64?: string | string[] | null;
+  templateId?: number; // Selected Reference Template ID
 }
 
 export type GeneratedResultStatus = 
@@ -93,4 +95,19 @@ export interface ContactDetails {
   company: string;
   email: string;
   phone: string;
+}
+
+export interface DesignTask {
+  id: number;
+  lead_id?: number;
+  type: DesignType;
+  status: 'pending' | 'in_progress' | 'completed' | 'cancelled';
+  assigned_to?: number; // User ID
+  reference_template_id?: number;
+  output_url?: string;
+  request_details: string; // JSON string of BusinessData
+  created_at: string;
+  lead_name?: string;     // Joined from Leads
+  lead_company?: string;  // Joined from Leads
+  assignee_name?: string; // Joined from Users
 }

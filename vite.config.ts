@@ -14,5 +14,14 @@ export default defineConfig(() => {
       // Expose PUBLIC_APP_URL to the frontend from the environment
       'process.env.PUBLIC_APP_URL': JSON.stringify(process.env.PUBLIC_APP_URL || defaultAppUrl),
     },
+    server: {
+      proxy: {
+        '/api': {
+          target: 'http://localhost:3000',
+          changeOrigin: true,
+          secure: false,
+        }
+      }
+    }
   }
 })
