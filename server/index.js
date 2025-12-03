@@ -161,7 +161,8 @@ app.get('/api/leads', authenticateToken, requireRole(['admin', 'coordinator', 'd
   try {
     const leads = await db.all("SELECT * FROM Leads ORDER BY created_at DESC");
     res.json(leads);
-  } catch (err) {
+  }
+  catch (err) {
     res.status(500).json({ error: "Failed to fetch leads" });
   }
 });

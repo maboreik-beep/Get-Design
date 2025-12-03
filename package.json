@@ -22,7 +22,6 @@
     "sqlite": "^5.1.1",
     "sqlite3": "^5.1.7",
     "jsonwebtoken": "^9.0.2",
-    "multer": "^1.4.5-lts.1",
     "exceljs": "^4.4.0"
   },
   "devDependencies": {
@@ -34,7 +33,6 @@
     "@types/node": "^20.12.7",
     "@types/express": "^4.17.21",
     "@types/cors": "^2.8.17",
-    "@types/jsonwebtoken": "^9.0.6",
-    "@types/multer": "^1.4.11"
+    "@types/jsonwebtoken": "^9.0.6"
   }
 }
